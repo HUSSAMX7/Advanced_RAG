@@ -172,8 +172,8 @@ def create_app(settings=None, *, prepare=prepare_document, embed_model=None, ans
         if lock.locked():
             raise LibraryConflict("هناك إجابة قيد التجهيز في هذه المحادثة.")
         try:
-            async with lock, library.mutation_lock:
-                context = await asyncio.to_thread(library.context)
+            async with lock:
+                context = library.context if library.has_documents else None
                 if answer is not ask_agent:
                     return await answer(
                         body.question,

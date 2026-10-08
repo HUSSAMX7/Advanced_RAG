@@ -11,8 +11,11 @@ Baseline: `9143356`. Build on the existing ingestion and chat functions.
 - Cancel queued/running training; discard unpublished chunks. Remove indexing
   of a trained file while retaining its upload; deletion removes both its upload
   and indexed chunks. Failed/cancelled work can be retried without duplicates.
-- Chat searches all currently indexed library files and reuses the existing
-  agent, source validation, and saved conversation history. Show source names,
+- Chat works immediately without uploaded or trained files for general questions.
+  The agent chooses whether to answer directly or search all currently indexed
+  library files when the question needs their contents. Direct answers have no
+  document sources. Preserve source validation for searched answers and saved
+  conversation history for both modes. Show source names,
   page numbers where applicable, and supporting excerpts when available.
 - Refresh retrieval after every corpus change. Preserve past conversations
   when a source is deleted, marking its source as unavailable.

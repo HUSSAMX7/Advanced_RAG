@@ -133,7 +133,7 @@ export default function Chat(props: Props) {
   const bottom = useRef<HTMLDivElement>(null)
   const turns = props.session?.turns ?? []
   const welcome = turns.length === 0 && !props.pending
-  const canSend = props.connected && props.trained > 0 && !props.sending && !props.loading
+  const canSend = props.connected && !props.sending && !props.loading
   useEffect(() => {
     if (!props.pending) setDraft('')
   }, [props.session?.session_id])
@@ -174,43 +174,38 @@ export default function Chat(props: Props) {
               معرفتك، أقرب مما تتخيل<span>.</span>
             </h1>
             <p>
-              اسأل ملفاتك، اكتشف التفاصيل، واربط الأفكار.
+              اسأل، اكتشف التفاصيل، واربط الأفكار.
               <br />
-              كل إجابة تبدأ من مصادرك.
+              تحدث مع مدار مباشرة، وأضف ملفاتك متى احتجت إليها.
             </p>
             <div className="welcome-ready">
               <span className="status-dot" />
               {props.trained
                 ? `${props.trained} ${props.trained === 1 ? 'ملف جاهز' : 'ملفات جاهزة'} للمحادثة`
-                : 'ابدأ بإضافة ملفاتك إلى المكتبة'}
+                : 'جاهز للمحادثة، دون الحاجة إلى ملفات'}
             </div>
             <div className="suggestion-grid">
               {[
                 [
-                  'لخّص المحتوى',
-                  'ما أهم الأفكار في المستندات؟',
-                  'لخّص أهم الأفكار الواردة في مستنداتي.',
+                  'افهم فكرة',
+                  'شرح واضح لموضوع جديد',
+                  'اشرح لي كيف يعمل الذكاء الاصطناعي بطريقة بسيطة.',
                 ],
+                ['رتّب أفكارك', 'حوّل فكرة إلى خطة عملية', 'ساعدني في وضع خطة لتعلم مهارة جديدة.'],
                 [
-                  'اكتشف التفاصيل',
-                  'ابحث عن إجابة دقيقة من ملفاتك',
-                  'ما التفاصيل والأرقام المهمة في مستنداتي؟',
-                ],
-                [
-                  'اربط الأفكار',
-                  'قارن المعلومات بين المستندات',
-                  'قارن بين الأفكار الواردة في المستندات وحدد أوجه التشابه والاختلاف.',
+                  props.trained ? 'اسأل مكتبتك' : 'اكتب معي',
+                  props.trained ? 'اكتشف أهم الأفكار في ملفاتك' : 'مساعدة في الصياغة والتعبير',
+                  props.trained
+                    ? 'لخّص أهم الأفكار الواردة في مستنداتي.'
+                    : 'ساعدني في كتابة رسالة شكر قصيرة وواضحة.',
                 ],
               ].map(([title, description, question], index) => (
                 <button
                   key={title}
                   className="suggestion"
                   onClick={() => {
-                    if (!props.trained) props.onLibrary()
-                    else {
-                      setDraft(question)
-                      input.current?.focus()
-                    }
+                    setDraft(question)
+                    input.current?.focus()
                   }}
                 >
                   <span className={`suggestion-icon suggestion-${index}`}>
@@ -230,7 +225,7 @@ export default function Chat(props: Props) {
             </div>
             {!props.trained && (
               <button className="welcome-library-link" onClick={props.onLibrary}>
-                افتح المكتبة وارفع أول ملف <ArrowUpLeft size={16} />
+                أضف ملفاتك للمحادثة من المكتبة <ArrowUpLeft size={16} />
               </button>
             )}
           </div>
@@ -246,7 +241,7 @@ export default function Chat(props: Props) {
                   <div className="assistant-label">
                     <Brand />
                     <strong>مدار</strong>
-                    <span>من مكتبتك</span>
+                    {!!turn.sources.length && <span>من مكتبتك</span>}
                   </div>
                   <Answer text={turn.answer} />
                   {!!turn.sources.length && <Sources sources={turn.sources} />}
@@ -268,7 +263,7 @@ export default function Chat(props: Props) {
                     <span />
                     <span />
                     <span />
-                    <small>أبحث في مصادرك وأجهّز الإجابة…</small>
+                    <small>أجهّز الإجابة…</small>
                   </div>
                 </div>
               </div>
@@ -290,9 +285,7 @@ export default function Chat(props: Props) {
                 ? 'جارٍ تجهيز إجابتك…'
                 : !props.connected
                   ? 'الاتصال بالخادم غير متوفر'
-                  : !props.trained
-                    ? 'درّب ملفًا من المكتبة لتبدأ المحادثة'
-                    : 'اسأل سؤالًا عن ملفاتك…'
+                  : 'اسأل عن أي موضوع أو عن ملفاتك…'
             }
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
@@ -304,7 +297,8 @@ export default function Chat(props: Props) {
           />
           <div className="composer-tools">
             <span className="composer-context">
-              <BookOpen size={14} /> كل ملفات المكتبة
+              <BookOpen size={14} />
+              {props.trained ? 'المكتبة متاحة عند الحاجة' : 'محادثة عامة'}
             </span>
             <button
               className="send-button"
@@ -317,7 +311,7 @@ export default function Chat(props: Props) {
           </div>
         </div>
         <p className="composer-note">
-          مدار يجيب من ملفاتك المدربة. راجع المصادر للتأكد من التفاصيل.
+          تحدث مع مدار مباشرة؛ يستخدم ملفاتك عند الحاجة. راجع الإجابات والمصادر للتأكد.
         </p>
       </div>
     </div>

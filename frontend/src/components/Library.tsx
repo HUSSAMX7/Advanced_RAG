@@ -73,7 +73,7 @@ export default function Library(props: Props) {
           </h1>
           <p>ارفع مستنداتك، درّبها، وابدأ محادثة تستند إلى محتواها.</p>
         </div>
-        <button className="button secondary" disabled={!trained} onClick={props.onChat}>
+        <button className="button secondary" onClick={props.onChat}>
           انتقل للشات <ArrowUpRight size={17} />
         </button>
       </div>

@@ -25,10 +25,111 @@ def tool_response(query):
     return response
 
 
-def test_agent_answers_with_a_real_source_and_saves_a_resumable_session(corpus):
+@pytest.mark.parametrize("with_documents", [False, True])
+def test_general_questions_do_not_require_training_or_search_and_can_resume(corpus, with_documents):
+    settings, embedding = corpus
+    context = load_search_context(settings, embed_model=embedding) if with_documents else None
+    requests = []
+
+    def respond(request):
+        body = json.loads(request.content)
+        requests.append(body)
+        assert body["tool_choice"] == ("auto" if with_documents else "none")
+        assert bool(body["tools"]) is with_documents
+        if len(requests) == 2:
+            assert "التمثيل الضوئي" in json.dumps(body["input"], ensure_ascii=False)
+        return httpx.Response(
+            200,
+            json=response_payload(
+                {"answer": "التمثيل الضوئي يحول الضوء إلى طاقة.", "cited_chunk_ids": []}
+            ),
+        )
+
+    async def run():
+        async with api_client(respond) as client:
+            first = await ask_agent(
+                "اشرح التمثيل الضوئي", context=context, client=client, settings=settings
+            )
+            return await ask_agent(
+                "بسط الشرح",
+                context=context,
+                client=client,
+                settings=settings,
+                session_id=first["session_id"],
+            )
+
+    answer = asyncio.run(run())
+    assert answer["answer"] == "التمثيل الضوئي يحول الضوء إلى طاقة."
+    assert answer["sources"] == []
+    assert len(requests) == 2
+    assert len(load_session(answer["session_id"], settings=settings)["turns"]) == 2
+
+
+def test_general_answer_cannot_claim_a_document_source(corpus):
+    settings, _ = corpus
+
+    async def run():
+        async with api_client(
+            lambda request: httpx.Response(
+                200,
+                json=response_payload({"answer": "Invented [1]", "cited_chunk_ids": ["unknown"]}),
+            )
+        ) as client:
+            return await ask_agent("Hello", context=None, client=client, settings=settings)
+
+    with pytest.raises(RuntimeError, match="invalid answer or citations"):
+        asyncio.run(run())
+    assert not settings.chat_sessions_dir.exists()
+
+
+def test_general_answers_can_include_brackets_in_code(corpus):
+    settings, _ = corpus
+
+    async def run():
+        async with api_client(
+            lambda request: httpx.Response(
+                200,
+                json=response_payload(
+                    {"answer": "Use `a[0]` to get the first item of `[1]`.", "cited_chunk_ids": []}
+                ),
+            )
+        ) as client:
+            return await ask_agent(
+                "How do Python lists work?", context=None, client=client, settings=settings
+            )
+
+    answer = asyncio.run(run())
+    assert answer["answer"] == "Use `a[0]` to get the first item of `[1]`."
+    assert answer["sources"] == []
+
+
+def test_general_answer_never_loads_the_document_index(corpus):
+    settings, _ = corpus
+
+    async def load_context():
+        raise AssertionError("General conversation must not wait for index loading")
+
+    async def run():
+        async with api_client(
+            lambda request: httpx.Response(
+                200, json=response_payload({"answer": "Hello!", "cited_chunk_ids": []})
+            )
+        ) as client:
+            return await ask_agent("Hello", context=load_context, client=client, settings=settings)
+
+    assert asyncio.run(run())["answer"] == "Hello!"
+
+
+@pytest.mark.parametrize("lazy", [False, True])
+def test_agent_answers_with_a_real_source_and_saves_a_resumable_session(corpus, lazy):
     settings, embedding = corpus
     context = load_search_context(settings, embed_model=embedding)
     requests = []
+    loads = []
+
+    async def load_context():
+        loads.append(True)
+        return context
 
     def respond(request):
         body = json.loads(request.content)
@@ -56,7 +157,10 @@ def test_agent_answers_with_a_real_source_and_saves_a_resumable_session(corpus):
     async def run():
         async with api_client(respond) as client:
             return await ask_agent(
-                "كم قيمة ZX-774؟", context=context, client=client, settings=settings
+                "كم قيمة ZX-774؟",
+                context=load_context if lazy else context,
+                client=client,
+                settings=settings,
             )
 
     answer = asyncio.run(run())
@@ -73,6 +177,7 @@ def test_agent_answers_with_a_real_source_and_saves_a_resumable_session(corpus):
         == "كم قيمة ZX-774؟"
     )
     assert len(requests) == 3
+    assert len(loads) == (1 if lazy else 0)
 
 
 def test_resumed_followup_uses_recent_history_and_keeps_all_saved_turns(corpus):

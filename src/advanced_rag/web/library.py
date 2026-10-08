@@ -250,10 +250,19 @@ class Library:
                 }
         return {"text": None, "available": False, "has_original": False}
 
-    def context(self):
+    @property
+    def has_documents(self):
+        return bool(self._nodes)
+
+    async def context(self):
+        # Called only when the model chooses search; general answers never wait for a writer.
+        async with self.mutation_lock:
+            return await asyncio.to_thread(self._search_context)
+
+    def _search_context(self):
         self._sync()
         if not self._nodes:
-            raise LibraryConflict("ارفع ملفًا ودرّبه من المكتبة أولًا لتبدأ المحادثة.")
+            return None
         if self._context is None:
             self._context = load_search_context(self.settings, embed_model=self.embed_model)
         return self._context

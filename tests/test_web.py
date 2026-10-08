@@ -2,6 +2,7 @@ import asyncio
 import threading
 import time
 
+import pytest
 from fastapi.testclient import TestClient
 from llama_index.core.embeddings import MockEmbedding
 from llama_index.core.schema import TextNode
@@ -78,6 +79,8 @@ def test_chat_resumes_sessions_and_sources_become_unavailable_after_deletion(tmp
     settings = web_settings(tmp_path)
 
     async def answer(question, *, context, settings, session_id, client):
+        if callable(context):
+            context = await context()
         node = context["nodes"][0]
         result = {
             "answer": "Important notes [1]",
@@ -97,12 +100,6 @@ def test_chat_resumes_sessions_and_sources_become_unavailable_after_deletion(tmp
         row = client.post("/api/files", files={"file": ("notes.txt", b"Important notes")}).json()
         session = client.post("/api/sessions").json()
         session_id = session["session_id"]
-        assert (
-            client.post(
-                f"/api/sessions/{session_id}/messages", json={"question": "question"}
-            ).status_code
-            == 409
-        )
         client.post(f"/api/files/{row['id']}/train")
         wait_status(client, row["id"], "trained")
         result = client.post(
@@ -117,6 +114,137 @@ def test_chat_resumes_sessions_and_sources_become_unavailable_after_deletion(tmp
             client.get(f"/api/sessions/{session_id}").json()["turns"][0]["answer"]
             == "Important notes [1]"
         )
+
+
+@pytest.mark.parametrize("library_state", ["empty", "uploaded", "unindexed", "deleted"])
+def test_general_chat_is_saved_and_resumed_without_trained_files(tmp_path, library_state):
+    settings = web_settings(tmp_path)
+
+    async def answer(question, *, context, settings, session_id, client):
+        assert context is None
+        session = load_session(session_id, settings=settings)
+        text = "General answer" if not session["turns"] else "Follow-up answer"
+        session["turns"].append({"question": question, "answer": text, "sources": []})
+        save_session(session, settings=settings)
+        return {"answer": text, "sources": [], "session_id": session_id}
+
+    with TestClient(
+        create_app(settings, embed_model=MockEmbedding(embed_dim=2), answer=answer)
+    ) as client:
+        if library_state != "empty":
+            row = client.post("/api/files", files={"file": ("notes.txt", b"notes")}).json()
+            if library_state in {"unindexed", "deleted"}:
+                client.post(f"/api/files/{row['id']}/train")
+                wait_status(client, row["id"], "trained")
+                if library_state == "unindexed":
+                    client.post(f"/api/files/{row['id']}/unindex")
+                else:
+                    client.delete(f"/api/files/{row['id']}")
+        session_id = client.post("/api/sessions").json()["session_id"]
+        first = client.post(f"/api/sessions/{session_id}/messages", json={"question": "Hello"})
+        assert first.status_code == 200
+        assert first.json()["answer"] == "General answer"
+        assert first.json()["sources"] == []
+        second = client.post(
+            f"/api/sessions/{session_id}/messages", json={"question": "Explain more"}
+        )
+        assert second.status_code == 200
+        assert second.json()["answer"] == "Follow-up answer"
+    with TestClient(create_app(settings, answer=answer)) as client:
+        assert len(client.get(f"/api/sessions/{session_id}").json()["turns"]) == 2
+
+
+def test_general_chat_does_not_wait_for_first_file_training(tmp_path):
+    settings = web_settings(tmp_path)
+    started = threading.Event()
+    release = threading.Event()
+    answered = threading.Event()
+
+    async def prepare(resource, settings, progress):
+        started.set()
+        while not release.is_set():
+            await asyncio.sleep(0.01)
+        return [TextNode(text="notes", metadata={"resource_id": resource["resource_id"]})]
+
+    async def answer(question, *, context, settings, session_id, client):
+        assert context is None
+        answered.set()
+        return {"answer": "Hello", "sources": [], "session_id": session_id}
+
+    with TestClient(
+        create_app(settings, prepare=prepare, embed_model=MockEmbedding(embed_dim=2), answer=answer)
+    ) as client:
+        row = client.post("/api/files", files={"file": ("notes.txt", b"notes")}).json()
+        client.post(f"/api/files/{row['id']}/train")
+        assert started.wait(timeout=3)
+        session_id = client.post("/api/sessions").json()["session_id"]
+        responses = []
+        request_thread = threading.Thread(
+            target=lambda: responses.append(
+                client.post(f"/api/sessions/{session_id}/messages", json={"question": "Hello"})
+            )
+        )
+        request_thread.start()
+        try:
+            assert answered.wait(timeout=2), "General chat waited for training"
+        finally:
+            release.set()
+            request_thread.join(timeout=5)
+        assert responses[0].status_code == 200
+        wait_status(client, row["id"], "trained")
+
+
+def test_general_chat_and_polling_work_during_embeddings_with_an_existing_library(tmp_path):
+    settings = web_settings(tmp_path)
+    block = threading.Event()
+    started = threading.Event()
+    release = threading.Event()
+
+    class GatedEmbedding(MockEmbedding):
+        def get_text_embedding_batch(self, texts, **kwargs):
+            if block.is_set():
+                started.set()
+                assert release.wait(timeout=5)
+            return super().get_text_embedding_batch(texts, **kwargs)
+
+    embedding = GatedEmbedding(embed_dim=2)
+
+    async def answer(question, *, context, settings, session_id, client):
+        assert callable(context)
+        return {"answer": "General answer", "sources": [], "session_id": session_id}
+
+    with TestClient(create_app(settings, embed_model=embedding, answer=answer)) as client:
+        first = client.post("/api/files", files={"file": ("first.txt", b"first")}).json()
+        client.post(f"/api/files/{first['id']}/train")
+        wait_status(client, first["id"], "trained")
+    block.set()
+    with TestClient(create_app(settings, embed_model=embedding, answer=answer)) as client:
+        second = client.post("/api/files", files={"file": ("second.txt", b"second")}).json()
+        client.post(f"/api/files/{second['id']}/train")
+        assert started.wait(timeout=3)
+        cancellations = []
+        cancel_thread = threading.Thread(
+            target=lambda: cancellations.append(client.post(f"/api/files/{second['id']}/cancel"))
+        )
+        try:
+            session_id = client.post("/api/sessions").json()["session_id"]
+            response = client.post(
+                f"/api/sessions/{session_id}/messages", json={"question": "Hello"}
+            )
+            assert response.status_code == 200
+            assert response.json()["answer"] == "General answer"
+            assert client.get("/api/files").status_code == 200
+            assert client.get("/api/health").status_code == 200
+            cancel_thread.start()
+            wait_status(client, second["id"], "cancelling")
+            assert client.get("/api/health").status_code == 200
+        finally:
+            release.set()
+            if cancel_thread.ident is not None:
+                cancel_thread.join(timeout=5)
+        assert cancellations[0].status_code == 200
+        wait_status(client, second["id"], "cancelled")
+        assert len(client.get("/api/files").json()) == 2
 
 
 def test_cancel_queued_work_does_not_wait_for_the_running_job_or_leak_the_writer_lock(tmp_path):

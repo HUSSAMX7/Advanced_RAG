@@ -25,9 +25,15 @@ async def prepare(resource, settings, progress):
 
 async def answer(question, *, context, client, settings, session_id):
     await asyncio.sleep(0.15)
-    node = context["nodes"][0]
-    text = "قيمة الفاتورة ZX-774 هي 120 دولارًا. [1]"
-    sources = [{"chunk_id": node.node_id, "citation": 1, "metadata": node.metadata}]
+    if callable(context):
+        context = await context()
+    if context is None:
+        text = "الذكاء الاصطناعي هو استخدام الحاسوب لأداء مهام مثل فهم اللغة والتعلم من الأمثلة."
+        sources = []
+    else:
+        node = context["nodes"][0]
+        text = "قيمة الفاتورة ZX-774 هي 120 دولارًا. [1]"
+        sources = [{"chunk_id": node.node_id, "citation": 1, "metadata": node.metadata}]
     session = load_session(session_id, settings=settings)
     session["turns"].append({"question": question, "answer": text, "sources": sources})
     save_session(session, settings=settings)
