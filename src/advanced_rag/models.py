@@ -1,10 +1,18 @@
 """Plain dictionary inputs and outputs for PDF processing functions."""
 
 from pathlib import Path
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 from uuid import NAMESPACE_URL, uuid5
 
-PdfResource = TypedDict("PdfResource", {"resource_id": str, "file_name": str, "data": bytes})
+PdfResource = TypedDict(
+    "PdfResource",
+    {
+        "resource_id": str,
+        "file_name": str,
+        "data": bytes,
+        "include_images": NotRequired[bool],
+    },
+)
 FileStatus = TypedDict(
     "FileStatus",
     {

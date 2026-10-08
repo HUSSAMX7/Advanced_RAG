@@ -8,6 +8,7 @@ export interface LibraryFile {
   status: FileStatus
   stage: string | null
   error: string | null
+  warning?: string | null
   chunks: number
   created_at: string
   updated_at: string
@@ -45,6 +46,13 @@ export interface SourceDetail {
   text: string | null
   file_id?: string
   metadata?: Source['metadata']
+  images?: SourceImage[]
+}
+export interface SourceImage {
+  id: string
+  kind: 'figure' | 'page'
+  page_num: number
+  url: string
 }
 export interface Health {
   status: string

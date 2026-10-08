@@ -11,7 +11,7 @@ from uuid import uuid4
 LibraryStatus = Literal[
     "untrained", "queued", "training", "cancelling", "trained", "failed", "cancelled"
 ]
-TrainingStage = Literal["extracting", "chunking", "storing", "preparing_ocr"]
+TrainingStage = Literal["extracting", "chunking", "storing", "preparing_ocr", "describing_images"]
 FileIntent = Literal["delete", "unindex"]
 
 
@@ -31,6 +31,7 @@ class FileRecord(TypedDict):
 class StoredFile(FileRecord):
     original: str | None
     intent: FileIntent | None
+    image_support: int
 
 
 class PublicFile(FileRecord):
@@ -89,6 +90,11 @@ class Registry:
                     created_at TEXT NOT NULL, updated_at TEXT NOT NULL
                 )
             """)
+            columns = {row["name"] for row in connection.execute("PRAGMA table_info(files)")}
+            if "image_support" not in columns:
+                connection.execute(
+                    "ALTER TABLE files ADD COLUMN image_support INTEGER NOT NULL DEFAULT 0"
+                )
 
     def connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path)
@@ -103,14 +109,15 @@ class Registry:
         file_id: str | None = None,
         original: str | None = None,
         status: LibraryStatus = "untrained",
+        image_support: bool = False,
     ) -> StoredFile:
         validate_lifecycle({"status": status})
         file_id = file_id or str(uuid4())
         now = timestamp()
         with self.connect() as connection:
             connection.execute(
-                "INSERT INTO files (id,name,size,type,original,status,created_at,updated_at) "
-                "VALUES (?,?,?,?,?,?,?,?)",
+                "INSERT INTO files (id,name,size,type,original,status,created_at,updated_at,image_support) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
                 (
                     file_id,
                     name,
@@ -120,6 +127,7 @@ class Registry:
                     status,
                     now,
                     now,
+                    int(image_support),
                 ),
             )
         return self.get(file_id)
@@ -163,7 +171,11 @@ class Registry:
     def public(row: StoredFile) -> PublicFile:
         return cast(
             PublicFile,
-            {key: value for key, value in row.items() if key not in {"original", "intent"}}
+            {
+                key: value
+                for key, value in row.items()
+                if key not in {"original", "intent", "image_support"}
+            }
             | {
                 "has_original": bool(row["original"]),
             },

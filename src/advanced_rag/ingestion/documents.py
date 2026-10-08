@@ -16,6 +16,7 @@ from llama_index.core.schema import TextNode
 
 from ..config import Settings
 from ..models import PdfResource
+from ..visuals import enrich_pdf_chunks
 from .chunking import create_chunks
 from .providers import get_pdf_extractor
 
@@ -101,7 +102,8 @@ async def prepare_document(
         else:
             raise ValueError("الصيغ المدعومة: PDF وDOCX وDOC وTXT.")
         nodes = [TextNode(text=text)] if text.strip() else []
-    if not nodes:
+    include_images = suffix == ".pdf" and resource.get("include_images", False)
+    if not nodes and not include_images:
         raise ValueError("الملف لا يحتوي نصًا يمكن تدريبه.")
     for node in nodes:
         node.metadata.update(
@@ -114,14 +116,19 @@ async def prepare_document(
             }
         )
     progress("chunking")
-    if suffix == ".pdf":
+    if suffix == ".pdf" and nodes:
         chunks = await create_chunks({resource["file_name"]: nodes}, settings=settings)
+    elif suffix == ".pdf":
+        chunks = []
     else:
         for node in nodes:
             node.metadata["section_id"] = f"0: {resource['file_name']}"
             node.metadata["sub_section_id"] = node.metadata["section_id"]
         chunks = SentenceSplitter(chunk_size=1024, chunk_overlap=50)(nodes)
     chunks = [node for node in chunks if node.get_content().strip()]
+    if include_images:
+        progress("describing_images")
+        chunks = await enrich_pdf_chunks(resource, nodes, chunks, settings)
     if not chunks:
         raise ValueError("لم ينتج عن الملف أي مقاطع قابلة للحفظ.")
     if any(not isinstance(node, TextNode) for node in chunks):

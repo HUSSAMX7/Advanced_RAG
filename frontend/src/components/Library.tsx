@@ -37,6 +37,7 @@ const statuses = {
   cancelled: 'تم الإلغاء',
 }
 const stages: Record<string, string> = {
+  describing_images: 'تجهيز الصور وتوصيفها',
   preparing_ocr: 'تجهيز LightOnOCR المحلي',
   extracting: 'استخراج النص',
   chunking: 'تقسيم إلى مقاطع',
@@ -241,6 +242,7 @@ export default function Library(props: Props) {
                     {statuses[file.status]}
                   </span>
                   {file.stage && <small>{file.stage.startsWith('ocr_page:') ? `قراءة صفحة ${file.stage.split(':')[1]} من ${file.stage.split(':')[2]}` : stages[file.stage] ?? file.stage}</small>}
+                  {file.warning && <small className="file-warning">{file.warning}</small>}
                   {file.error && (
                     <small className="file-error" title={file.error}>
                       {file.error}

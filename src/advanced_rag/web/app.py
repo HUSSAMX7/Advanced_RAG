@@ -53,7 +53,9 @@ def create_app(settings=None, *, prepare=prepare_document, embed_model=None, ans
     @app.exception_handler(RequestValidationError)
     async def bad_request(request: Request, exc):
         # Pydantic includes input values by default, which could expose credentials.
-        return JSONResponse({"detail": "قيمة غير صالحة في الطلب. راجع الحقول وحاول مجددًا."}, status_code=422)
+        return JSONResponse(
+            {"detail": "قيمة غير صالحة في الطلب. راجع الحقول وحاول مجددًا."}, status_code=422
+        )
 
     @app.get("/api/settings")
     async def read_settings():
@@ -63,13 +65,21 @@ def create_app(settings=None, *, prepare=prepare_document, embed_model=None, ans
     @app.put("/api/settings")
     async def save_settings(body: SettingsPatch):
         nonlocal runtime_settings
-        if library.mutation_lock.locked() or any(
-            job.task and not job.task.done() for job in library.jobs.values()
-        ) or any(lock.locked() for lock in session_locks.values()):
+        if (
+            library.mutation_lock.locked()
+            or any(job.task and not job.task.done() for job in library.jobs.values())
+            or any(lock.locked() for lock in session_locks.values())
+        ):
             raise LibraryConflict("انتظر اكتمال التدريب أو الإجابة الحالية قبل حفظ الإعدادات.")
         library.list()
-        if body.embedding_model and body.embedding_model != runtime_settings.embedding_model and library.has_documents:
-            raise LibraryConflict("أزل فهرسة الملفات المدرّبة قبل تغيير مودل embeddings، ثم درّبها مجددًا.")
+        if (
+            body.embedding_model
+            and body.embedding_model != runtime_settings.embedding_model
+            and library.has_documents
+        ):
+            raise LibraryConflict(
+                "أزل فهرسة الملفات المدرّبة قبل تغيير مودل embeddings، ثم درّبها مجددًا."
+            )
         runtime_settings = web_settings.save(body)
         library.update_settings(runtime_settings)
         return {**web_settings.public(), "embedding_locked": library.has_documents}
@@ -123,7 +133,9 @@ def create_app(settings=None, *, prepare=prepare_document, embed_model=None, ans
                 with path.open("rb") as source:
                     if b"%PDF-" not in source.read(1024):
                         raise ValueError("الملف المرفوع ليس PDF صالحًا.")
-            row = library.registry.add(name, size, file_id=file_id, original=original)
+            row = library.registry.add(
+                name, size, file_id=file_id, original=original, image_support=suffix == ".pdf"
+            )
             return library.registry.public(row)
         finally:
             await file.close()
@@ -160,6 +172,14 @@ def create_app(settings=None, *, prepare=prepare_document, embed_model=None, ans
     @app.get("/api/sources/{chunk_id}")
     async def source(chunk_id: str):
         return library.source(chunk_id)
+
+    @app.get("/api/sources/{chunk_id}/images/{image_id}")
+    async def source_image(chunk_id: str, image_id: str):
+        return FileResponse(
+            library.image(chunk_id, image_id),
+            media_type="image/jpeg",
+            headers={"Cache-Control": "no-store"},
+        )
 
     def session_summary(session, path):
         turns = session["turns"]

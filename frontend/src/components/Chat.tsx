@@ -31,12 +31,16 @@ function Sources({ sources }: { sources: Source[] }) {
   const [selected, setSelected] = useState<Source | null>(null)
   const [detail, setDetail] = useState<SourceDetail | null>(null)
   const [error, setError] = useState('')
+  const [enlarged, setEnlarged] = useState<string | null>(null)
+  const [failedImages, setFailedImages] = useState<string[]>([])
   const dialog = useRef<HTMLDialogElement>(null)
 
   async function open(source: Source) {
     setSelected(source)
     setDetail(null)
     setError('')
+    setEnlarged(null)
+    setFailedImages([])
     dialog.current?.showModal()
     try {
       setDetail(await api<SourceDetail>(`/sources/${encodeURIComponent(source.chunk_id)}`))
@@ -88,9 +92,42 @@ function Sources({ sources }: { sources: Source[] }) {
           </p>
         ) : (
           <>
-            <div className="source-excerpt" dir="auto">
-              {detail.text}
-            </div>
+            {detail.text && (
+              <div className="source-excerpt" dir="auto">
+                {detail.text}
+              </div>
+            )}
+            {!!detail.images?.length && (
+              <div className="source-images">
+                {detail.images.map((image) => (
+                  <figure key={image.id}>
+                    {failedImages.includes(image.id) ? (
+                      <p className="source-unavailable">تعذر تحميل صورة المصدر. أعد فتح المصدر للمحاولة مجددًا.</p>
+                    ) : (
+                      <button
+                        className={`source-image-button ${enlarged === image.id ? 'enlarged' : ''}`}
+                        onClick={() => setEnlarged(enlarged === image.id ? null : image.id)}
+                        aria-label={enlarged === image.id ? 'تصغير صورة المصدر' : 'تكبير صورة المصدر'}
+                        aria-expanded={enlarged === image.id}
+                      >
+                        <img
+                          src={image.url}
+                          onError={() => setFailedImages((current) => [...current, image.id])}
+                          alt={`${image.kind === 'page' ? 'الصفحة الأصلية' : 'صورة من المصدر'} — صفحة ${image.page_num}`}
+                        />
+                      </button>
+                    )}
+                    <figcaption>
+                      {image.kind === 'page'
+                        ? 'الصفحة الأصلية كاملة؛ ارتباط الشكل بالنص غير محدد'
+                        : 'الصورة المرتبطة بالمقطع'}
+                      {' · '}صفحة {image.page_num}{' · '}
+                      {enlarged === image.id ? 'اضغط للتصغير' : 'اضغط للتكبير'}
+                    </figcaption>
+                  </figure>
+                ))}
+              </div>
+            )}
             {detail.has_original && (
               <a className="button secondary" href={`/api/files/${detail.file_id}/download`}>
                 <Download size={17} /> تنزيل الملف الأصلي

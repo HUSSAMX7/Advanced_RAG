@@ -1947,3 +1947,34 @@ dialog::backdrop {
   .provider-options, .model-fields { grid-template-columns: 1fr; }
   .settings-save-bar { align-items: stretch; flex-direction: column; }
 }
+/* Original visual evidence in the source dialog. */
+.source-images {
+  display: grid;
+  gap: 18px;
+  margin-block: 20px;
+}
+.source-images figure { margin: 0; }
+.source-image-button {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  cursor: zoom-in;
+}
+.source-image-button img {
+  display: block;
+  max-width: 100%;
+  max-height: 220px;
+  margin-inline: auto;
+  object-fit: contain;
+}
+.source-image-button.enlarged { cursor: zoom-out; }
+.source-image-button.enlarged img { max-height: none; width: 100%; }
+.source-images figcaption {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.file-state .file-warning { color: #946200; }

@@ -16,6 +16,7 @@ from ..storage import (
     remove_file_from_faiss,
     store_in_faiss,
 )
+from ..visuals import evidence_metadata, evidence_text, image_path, prune_images
 from .registry import Registry
 
 logger = logging.getLogger(__name__)
@@ -64,7 +65,10 @@ class Library:
         self._nodes = []
 
     def _sync(self):
-        revision = index_revision(self.settings)
+        # Windows may reject a read concurrent with the atomic pointer replacement.
+        # Hold this only for the pointer read, never while acquiring the index lock.
+        with self.commit_lock:
+            revision = index_revision(self.settings)
         if revision == self._revision:
             return
         self._nodes, _ = read_index_nodes(self.settings)
@@ -88,6 +92,8 @@ class Library:
     async def start(self):
         self.settings.faiss_persist_dir.mkdir(parents=True, exist_ok=True)
         self._sync()
+        # Prune before restarting queued jobs: their staged images are not indexed yet.
+        await asyncio.to_thread(self._prune_images)
         for row in self.registry.list():
             if row["intent"]:
                 await self.remove(row["id"], delete=row["intent"] == "delete")
@@ -116,7 +122,19 @@ class Library:
 
     def list(self):
         self._sync()
-        return [self.registry.public(row) for row in self.registry.list()]
+        warnings = {
+            file_key(node): node.metadata["visual_warning"]
+            for node in self._nodes
+            if node.metadata.get("visual_warning")
+        }
+        return [
+            {**self.registry.public(row), "warning": warnings.get(row["id"])}
+            for row in self.registry.list()
+        ]
+
+    def _prune_images(self):
+        nodes, _ = read_index_nodes(self.settings)
+        prune_images(self.settings, nodes)
 
     def train(self, file_id):
         row = self.registry.get(file_id)
@@ -156,7 +174,12 @@ class Library:
 
             chunks = await cancellable(
                 self.prepare(
-                    {"resource_id": file_id, "file_name": row["name"], "data": data},
+                    {
+                        "resource_id": file_id,
+                        "file_name": row["name"],
+                        "data": data,
+                        "include_images": bool(row["image_support"]),
+                    },
                     self.settings,
                     progress,
                 ),
@@ -189,7 +212,10 @@ class Library:
             self.registry.update(file_id, status="failed", stage=None, error=message)
         finally:
             if acquired:
-                self.mutation_lock.release()
+                try:
+                    await asyncio.to_thread(self._prune_images)
+                finally:
+                    self.mutation_lock.release()
 
     async def cancel(self, file_id):
         row = self.registry.get(file_id)
@@ -219,6 +245,7 @@ class Library:
         try:
             async with self.mutation_lock:
                 await asyncio.to_thread(remove_file_from_faiss, file_id, self.settings)
+                await asyncio.to_thread(self._prune_images)
                 if delete:
                     self.registry.delete(file_id)
                 else:
@@ -242,13 +269,26 @@ class Library:
             if node.node_id == chunk_id:
                 row = self.registry.get(file_key(node))
                 return {
-                    "text": node.get_content(),
-                    "metadata": node.metadata,
+                    "text": evidence_text(node),
+                    "metadata": evidence_metadata(node.metadata),
                     "file_id": row["id"],
                     "available": True,
                     "has_original": bool(row["original"]),
+                    "images": [
+                        {**image, "url": f"/api/sources/{chunk_id}/images/{image['id']}"}
+                        for image in node.metadata.get("images", [])
+                        if image_path(self.settings, image["id"]).is_file()
+                    ],
                 }
         return {"text": None, "available": False, "has_original": False}
+
+    def image(self, chunk_id, image_id):
+        source = self.source(chunk_id)
+        if not source["available"] or not any(
+            image["id"] == image_id for image in source.get("images", [])
+        ):
+            raise FileNotFoundError("الصورة لم تعد متاحة ضمن هذا المصدر.")
+        return image_path(self.settings, image_id)
 
     @property
     def has_documents(self):

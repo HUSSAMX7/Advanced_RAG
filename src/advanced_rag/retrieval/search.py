@@ -7,6 +7,7 @@ from rank_bm25 import BM25Okapi
 
 from ..config import Settings
 from ..storage import load_faiss_index
+from ..visuals import evidence_metadata, evidence_text
 from .reranking import rerank_chunks
 from .types import SearchContext, SearchHit
 
@@ -84,4 +85,12 @@ async def search_documents(
         for chunk_id in selected
     ]
     ranked = await rerank_chunks(query, candidates, settings=settings)
-    return ranked[: settings.retrieval_top_k]
+    # Descriptions participate in retrieval/reranking, but never become answer evidence.
+    return [
+        {
+            "chunk_id": hit["chunk_id"],
+            "text": evidence_text(by_id[hit["chunk_id"]]),
+            "metadata": evidence_metadata(hit["metadata"]),
+        }
+        for hit in ranked[: settings.retrieval_top_k]
+    ]
