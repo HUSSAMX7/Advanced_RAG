@@ -1,0 +1,235 @@
+import asyncio
+import threading
+import time
+
+from fastapi.testclient import TestClient
+from llama_index.core.embeddings import MockEmbedding
+from llama_index.core.schema import TextNode
+
+from advanced_rag import Settings
+from advanced_rag.agent.sessions import load_session, save_session
+from advanced_rag.storage import load_faiss_index
+from advanced_rag.web.app import create_app
+
+
+def web_settings(tmp_path):
+    return Settings(
+        _env_file=None,
+        web_data_dir=tmp_path / "library",
+        faiss_persist_dir=tmp_path / "index",
+        chat_sessions_dir=tmp_path / "sessions",
+    )
+
+
+def wait_status(client, file_id, expected):
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        row = next(row for row in client.get("/api/files").json() if row["id"] == file_id)
+        if row["status"] == expected:
+            return row
+        time.sleep(0.01)
+    raise AssertionError(f"Expected {expected}; got {row}")
+
+
+def test_upload_train_unindex_retrain_delete_survives_restart(tmp_path):
+    settings = web_settings(tmp_path)
+    embedding = MockEmbedding(embed_dim=2)
+    with TestClient(create_app(settings, embed_model=embedding)) as client:
+        response = client.post("/api/files", files={"file": ("notes.txt", b"Important notes")})
+        assert response.status_code == 201
+        row = response.json()
+        assert row["status"] == "untrained"
+        assert client.post(f"/api/files/{row['id']}/train").status_code == 202
+        assert wait_status(client, row["id"], "trained")["chunks"] == 1
+        assert client.post(f"/api/files/{row['id']}/train").status_code == 200
+        assert load_faiss_index(settings, embed_model=embedding).vector_store.client.ntotal == 1
+        assert client.post(f"/api/files/{row['id']}/unindex").json()["status"] == "untrained"
+        assert client.get(f"/api/files/{row['id']}/download").content == b"Important notes"
+        assert load_faiss_index(settings, embed_model=embedding).vector_store.client.ntotal == 0
+        client.post(f"/api/files/{row['id']}/train")
+        wait_status(client, row["id"], "trained")
+    with TestClient(create_app(settings, embed_model=embedding)) as client:
+        assert client.get("/api/files").json()[0]["status"] == "trained"
+        assert client.delete(f"/api/files/{row['id']}").status_code == 204
+        assert client.get("/api/files").json() == []
+        assert load_faiss_index(settings, embed_model=embedding).vector_store.client.ntotal == 0
+
+
+def test_cancelled_training_does_not_publish_and_can_be_retried(tmp_path):
+    settings = web_settings(tmp_path)
+
+    async def prepare(resource, settings, progress):
+        progress("extracting")
+        await asyncio.sleep(0.15)
+        return [TextNode(text="test", metadata={"resource_id": resource["resource_id"]})]
+
+    with TestClient(
+        create_app(settings, prepare=prepare, embed_model=MockEmbedding(embed_dim=2))
+    ) as client:
+        row = client.post("/api/files", files={"file": ("notes.txt", b"notes")}).json()
+        client.post(f"/api/files/{row['id']}/train")
+        assert client.post(f"/api/files/{row['id']}/cancel").status_code == 200
+        wait_status(client, row["id"], "cancelled")
+        client.post(f"/api/files/{row['id']}/train")
+        wait_status(client, row["id"], "trained")
+
+
+def test_chat_resumes_sessions_and_sources_become_unavailable_after_deletion(tmp_path):
+    settings = web_settings(tmp_path)
+
+    async def answer(question, *, context, settings, session_id, client):
+        node = context["nodes"][0]
+        result = {
+            "answer": "Important notes [1]",
+            "sources": [{"chunk_id": node.node_id, "citation": 1, "metadata": node.metadata}],
+            "session_id": session_id,
+        }
+        session = load_session(session_id, settings=settings)
+        session["turns"].append(
+            {"question": question, "answer": result["answer"], "sources": result["sources"]}
+        )
+        save_session(session, settings=settings)
+        return result
+
+    with TestClient(
+        create_app(settings, embed_model=MockEmbedding(embed_dim=2), answer=answer)
+    ) as client:
+        row = client.post("/api/files", files={"file": ("notes.txt", b"Important notes")}).json()
+        session = client.post("/api/sessions").json()
+        session_id = session["session_id"]
+        assert (
+            client.post(
+                f"/api/sessions/{session_id}/messages", json={"question": "question"}
+            ).status_code
+            == 409
+        )
+        client.post(f"/api/files/{row['id']}/train")
+        wait_status(client, row["id"], "trained")
+        result = client.post(
+            f"/api/sessions/{session_id}/messages", json={"question": "What is important?"}
+        ).json()
+        chunk_id = result["sources"][0]["chunk_id"]
+        assert client.get(f"/api/sources/{chunk_id}").json()["text"] == "Important notes"
+        assert client.get("/api/sessions").json()[0]["title"] == "What is important?"
+        client.delete(f"/api/files/{row['id']}")
+        assert client.get(f"/api/sources/{chunk_id}").json()["available"] is False
+        assert (
+            client.get(f"/api/sessions/{session_id}").json()["turns"][0]["answer"]
+            == "Important notes [1]"
+        )
+
+
+def test_cancel_queued_work_does_not_wait_for_the_running_job_or_leak_the_writer_lock(tmp_path):
+    settings = web_settings(tmp_path)
+    started = threading.Event()
+    release = threading.Event()
+
+    async def prepare(resource, settings, progress):
+        progress("extracting")
+        if resource["file_name"] == "first.txt":
+            started.set()
+            while not release.is_set():
+                await asyncio.sleep(0.01)
+        return [
+            TextNode(text=resource["file_name"], metadata={"resource_id": resource["resource_id"]})
+        ]
+
+    with TestClient(
+        create_app(settings, prepare=prepare, embed_model=MockEmbedding(embed_dim=2))
+    ) as client:
+        first = client.post("/api/files", files={"file": ("first.txt", b"first")}).json()
+        second = client.post("/api/files", files={"file": ("second.txt", b"second")}).json()
+        client.post(f"/api/files/{first['id']}/train")
+        assert started.wait(timeout=3)
+        try:
+            client.post(f"/api/files/{second['id']}/train")
+            assert client.post(f"/api/files/{second['id']}/cancel").json()["status"] == "cancelled"
+            assert (
+                next(row for row in client.get("/api/files").json() if row["id"] == first["id"])[
+                    "status"
+                ]
+                == "training"
+            )
+        finally:
+            release.set()
+        wait_status(client, first["id"], "trained")
+        client.post(f"/api/files/{second['id']}/train")
+        wait_status(client, second["id"], "trained")
+
+
+def test_unsupported_empty_oversized_and_spoofed_pdf_uploads_leave_no_files(tmp_path):
+    settings = web_settings(tmp_path).model_copy(update={"max_upload_bytes": 8})
+    with TestClient(create_app(settings)) as client:
+        for name, content, expected in [
+            ("notes.exe", b"text", 400),
+            ("notes.txt", b"", 400),
+            ("notes.txt", b"012345678", 413),
+            ("fake.pdf", b"notpdf", 400),
+        ]:
+            assert (
+                client.post("/api/files", files={"file": (name, content)}).status_code == expected
+            )
+        assert client.get("/api/files").json() == []
+        assert list((settings.web_data_dir / "uploads").iterdir()) == []
+
+
+def test_same_file_name_does_not_merge_uploaded_documents(tmp_path):
+    settings = web_settings(tmp_path)
+    embedding = MockEmbedding(embed_dim=2)
+    with TestClient(create_app(settings, embed_model=embedding)) as client:
+        first = client.post("/api/files", files={"file": ("same.txt", b"first document")}).json()
+        second = client.post("/api/files", files={"file": ("same.txt", b"second document")}).json()
+        for row in [first, second]:
+            client.post(f"/api/files/{row['id']}/train")
+            wait_status(client, row["id"], "trained")
+        client.delete(f"/api/files/{first['id']}")
+        index = load_faiss_index(settings, embed_model=embedding)
+        nodes = index.docstore.get_nodes(list(index.index_struct.nodes_dict.values()))
+        assert [node.text for node in nodes] == ["second document"]
+
+
+def test_publication_is_recovered_if_status_write_was_interrupted(tmp_path):
+    import sqlite3
+
+    settings = web_settings(tmp_path)
+    embedding = MockEmbedding(embed_dim=2)
+    with TestClient(create_app(settings, embed_model=embedding)) as client:
+        row = client.post("/api/files", files={"file": ("notes.txt", b"Important notes")}).json()
+        client.post(f"/api/files/{row['id']}/train")
+        wait_status(client, row["id"], "trained")
+    # Simulate a process exiting after publishing the index but before updating SQLite.
+    with sqlite3.connect(settings.web_data_dir / "library.sqlite3") as connection:
+        connection.execute(
+            "UPDATE files SET status='training', stage='storing' WHERE id=?", (row["id"],)
+        )
+    with TestClient(create_app(settings, embed_model=embedding)) as client:
+        recovered = client.get("/api/files").json()[0]
+        assert recovered["status"] == "trained"
+        assert recovered["chunks"] == 1
+        assert client.post(f"/api/files/{row['id']}/train").status_code == 200
+        assert load_faiss_index(settings, embed_model=embedding).vector_store.client.ntotal == 1
+
+
+def test_failure_preserves_prior_corpus_and_retries_without_duplicate_vectors(tmp_path):
+    settings = web_settings(tmp_path)
+    fail = threading.Event()
+
+    async def prepare(resource, settings, progress):
+        if fail.is_set():
+            raise ValueError("فشل استخراج النص")
+        return [TextNode(text="test", metadata={"resource_id": resource["resource_id"]})]
+
+    embedding = MockEmbedding(embed_dim=2)
+    with TestClient(create_app(settings, prepare=prepare, embed_model=embedding)) as client:
+        first = client.post("/api/files", files={"file": ("first.txt", b"first")}).json()
+        second = client.post("/api/files", files={"file": ("second.txt", b"second")}).json()
+        client.post(f"/api/files/{first['id']}/train")
+        wait_status(client, first["id"], "trained")
+        fail.set()
+        client.post(f"/api/files/{second['id']}/train")
+        assert wait_status(client, second["id"], "failed")["error"] == "فشل استخراج النص"
+        assert load_faiss_index(settings, embed_model=embedding).vector_store.client.ntotal == 1
+        fail.clear()
+        client.post(f"/api/files/{second['id']}/train")
+        wait_status(client, second["id"], "trained")
+        assert load_faiss_index(settings, embed_model=embedding).vector_store.client.ntotal == 2

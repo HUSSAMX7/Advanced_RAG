@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     retrieval_candidates: int = Field(default=20, gt=0)
     retrieval_top_k: int = Field(default=5, gt=0)
     chat_sessions_dir: Path = Path("chat_sessions")
+    web_data_dir: Path = Path("storage/library")
+    max_upload_bytes: int = Field(default=50 * 1024 * 1024, gt=0)
+    libreoffice_path: str | None = None
 
 
 def require_openai_key(settings: Settings) -> str:

@@ -206,6 +206,10 @@ tempCodeRunnerFile.py
 # Local PDF exports and configuration.
 output/
 storage/
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
+chat_sessions/
 chat_sessions/
 .env
 !.env.example
