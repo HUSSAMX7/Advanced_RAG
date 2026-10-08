@@ -1,6 +1,4 @@
-def main():
-    print("Hello from advanced-rag!")
-
+from advanced_rag.cli import main
 
 if __name__ == "__main__":
     main()
