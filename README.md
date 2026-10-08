@@ -20,6 +20,8 @@ src/advanced_rag/
 │   ├── sections.py          # استخراج الأقسام ومراجعتها وربطها الأصلي
 │   ├── chunking.py          # create_chunks: الأقسام ثم SentenceSplitter
 │   └── pipeline.py          # الاستخراج ثم تجهيز المقاطع ثم الحفظ
+├── retrieval/                # FAISS + BM25 + RRF ثم reranking عبر OpenAI
+├── agent/                    # إيجنت OpenAI وشات الطرفية وحفظ الجلسات
 ├── storage.py                # embeddings وحفظ فهرس FAISS وتحميله
 ├── models.py                 # بيانات الملف وحالة المعالجة
 ├── config.py                 # إعدادات الاتصال
@@ -73,6 +75,62 @@ results = index.as_retriever(similarity_top_k=5).retrieve("سؤال عن الم�
 تكامل FAISS المستخدم لا يدعم فلترة metadata أو حذف المستندات؛ التخزين مخصص
 للتشغيل المحلي، مع عملية كتابة واحدة على مجلد الفهرس في كل مرة.
 
+## سؤال الإيجنت
+
+بعد إدخال ملفات PDF، ضع `OPENAI_API_KEY` وشغّل:
+
+```powershell
+uv run advanced-rag-chat
+uv run advanced-rag-chat --question "كم قيمة الفاتورة ZX-774؟"
+uv run advanced-rag-chat --session "معرّف-الجلسة-الذي-ظهر-لك"
+uv run advanced-rag-chat --persist-dir storage/pdf_documents --sessions-dir chat_sessions
+```
+
+للخروج من الشات اكتب `/exit`. النتيجة تعرض الإجابة، مراجع الملفات وأرقام الصفحات،
+ومعرّف الجلسة UUID. استخدام `--session` يتطلب جلسة محفوظة؛ لا ينشئ جلسة بديلة عند الخطأ.
+تُحفظ الأسئلة والإجابات والمصادر محليًا في `chat_sessions/`، ويستخدم الإيجنت آخر
+10 تبادلات لفهم المتابعة. لا يُحفظ السؤال الذي فشل تنفيذه، ويظل تاريخ الجلسة كاملًا.
+شغّل عملية شات واحدة لكل جلسة في كل مرة.
+
+أداة `search_documents` تبحث مرة واحدة لكل سؤال في جميع ملفات الفهرس. تجمع حتى
+20 نتيجة من المتجهات و20 من الكلمات، تدمجها بـRRF، ثم ترتّب أفضل 20 عبر OpenAI
+وترجع أفضل 5. يستخدم الإيجنت OpenAI SDK مباشرة دون LangChain أو Agents SDK.
+بحث واحد لا يعني طلب OpenAI واحدًا: توجد طلبات صياغة استعلام الأداة، embedding
+للسؤال، reranking، وتوليد الإجابة.
+
+`AGENT_MODEL` و`RERANK_MODEL` افتراضيًا `gpt-4o-mini`. يمكن تعديل أعداد النتائج عبر
+`RETRIEVAL_CANDIDATES` و`RETRIEVAL_TOP_K`. تطبيع الكلمات العربية والإنجليزية يحدث
+داخل البحث اللفظي فقط؛ النص الأصلي والأرقام والتواريخ تبقى كما هي. يُبنى BM25 من
+الفهرس عند بدء الشات؛ أعد فتح الشات بعد إضافة مستندات جديدة.
+
+للاستخدام من Python:
+
+```python
+import asyncio
+from dotenv import load_dotenv
+from openai import AsyncOpenAI
+from advanced_rag import Settings
+from advanced_rag.agent import ask_agent
+from advanced_rag.config import require_openai_key
+from advanced_rag.retrieval import load_search_context
+
+async def main():
+    load_dotenv()
+    settings = Settings()
+    context = load_search_context(settings)
+    async with AsyncOpenAI(api_key=require_openai_key(settings)) as client:
+        result = await ask_agent("ما تفاصيل الفاتورة؟", context=context,
+                                 client=client, settings=settings)
+        print(result["answer"], result["sources"], result["session_id"])
+        # مرّر session_id=result["session_id"] للسؤال التالي لاستكمال المحادثة.
+
+asyncio.run(main())
+```
+
+الـreranking غير الصالح أو أخطاء API تتوقف بخطأ واضح؛ لا تُرجع نتائج غير مرتبة
+بصمت. تُراجع معرّفات المصادر وأرقام المراجع قبل حفظ الإجابة. توجيه الإيجنت هو
+التصريح عند عدم كفاية الأدلة؛ صحة صياغة الإجابة تحتاج تقييمًا على مستنداتك الفعلية.
+
 الأقسام تستخدم `gpt-4o-mini` كما في الأصل، وتُربط بالصفحات حسب رقم بداية القسم.
 إذا لم تُستخرج أقسام، يُستخدم `0: اسم الملف`.
 
@@ -87,6 +145,8 @@ results = index.as_retriever(similarity_top_k=5).retrieve("سؤال عن الم�
 
 ```powershell
 uv run pytest -q
+uv run ruff check src/advanced_rag/agent src/advanced_rag/retrieval tests
+uvx ty check src/advanced_rag/agent src/advanced_rag/retrieval src/advanced_rag/config.py
 ```
 
 الاختبارات تستخدم استجابات وهمية وFAISS فعليًا داخل مجلدات مؤقتة؛ لا تستدعي خدمات الاستخراج

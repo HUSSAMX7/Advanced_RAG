@@ -206,6 +206,7 @@ tempCodeRunnerFile.py
 # Local PDF exports and configuration.
 output/
 storage/
+chat_sessions/
 .env
 !.env.example
 
