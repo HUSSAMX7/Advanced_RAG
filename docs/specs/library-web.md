@@ -25,6 +25,9 @@ Baseline: `9143356`. Build on the existing ingestion and chat functions.
 - Persist uploads/statuses in SQLite and retain existing JSON chat sessions.
   Use staged index generations with atomic publication and startup recovery.
 - Existing PDF CLI and retrieval CLI stay compatible with persisted indexes.
+- Settings in the web sidebar manage the extraction provider, credentials and
+  models. Local LightOnOCR starts automatically at PDF training without a URL;
+  see `settings-web.md` for persistence, model compatibility and cancellation.
 - Verify upload/training/cancel/unindex/delete and chat/session behavior through
   the HTTP interface and persistence through the public storage functions.
   Use real FAISS with fake embedding/extraction/model providers in tests.

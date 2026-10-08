@@ -85,7 +85,7 @@ async def prepare_document(
     suffix = Path(resource["file_name"]).suffix.lower()
     progress("extracting")
     if suffix == ".pdf":
-        nodes = await get_pdf_extractor(settings)(resource)
+        nodes = await get_pdf_extractor(settings, progress=progress)(resource)
         nodes = [node for node in nodes if node.get_content().strip()]
     else:
         data = resource["data"]
@@ -115,7 +115,7 @@ async def prepare_document(
         )
     progress("chunking")
     if suffix == ".pdf":
-        chunks = await create_chunks({resource["file_name"]: nodes})
+        chunks = await create_chunks({resource["file_name"]: nodes}, settings=settings)
     else:
         for node in nodes:
             node.metadata["section_id"] = f"0: {resource['file_name']}"

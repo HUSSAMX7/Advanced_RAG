@@ -17,6 +17,8 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("LLAMA_PARSE_API_KEY", "LLAMA_CLOUD_API_KEY"),
     )
     lightonocr_url: str | None = None
+    lightonocr_local: bool = False
+    lightonocr_local_timeout_seconds: float = Field(default=1800, gt=0)
     lightonocr_model: str = "lightonai/LightOnOCR-2-1B"
     lightonocr_dpi: int = Field(default=200, gt=0)
     lightonocr_concurrency: int = Field(default=64, gt=0)

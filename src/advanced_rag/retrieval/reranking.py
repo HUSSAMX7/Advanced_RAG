@@ -1,14 +1,20 @@
 """Score query/excerpt pairs locally with a cached BGE cross-encoder."""
 
 import asyncio
+import gc
 import math
-import threading
 from functools import lru_cache
 
 from ..config import Settings
+from ..local_models import inference_lock
 from .types import SearchHit
 
-_inference_lock = threading.Lock()
+
+def release_reranker():
+    """Release cached weights before another local model needs the CPU memory."""
+    with inference_lock:
+        _load_model.cache_clear()
+        gc.collect()
 
 
 class RerankingError(RuntimeError):
@@ -25,7 +31,7 @@ def _load_model(model_name: str, max_length: int):
 def _rank(query: str, candidates: list[SearchHit], settings: Settings) -> list[SearchHit]:
     try:
         # Serialize loading and inference: concurrent requests share one model in memory.
-        with _inference_lock:
+        with inference_lock:
             model = _load_model(settings.rerank_model, settings.rerank_max_length)
             raw_scores = model.predict(
                 [(query, hit["text"]) for hit in candidates],

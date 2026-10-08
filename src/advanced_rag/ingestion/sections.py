@@ -5,8 +5,10 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 from llama_index.core.schema import TextNode
 from llama_index.core.async_utils import run_jobs
-from llama_index.core.base.llms.types import ChatMessage
-from llama_index.llms.openai import OpenAI
+from openai import AsyncOpenAI
+from openai.types.responses import ResponseInputParam
+
+from ..config import Settings, require_openai_key
 
 
 
@@ -39,7 +41,7 @@ class SectionsOutput(BaseModel):
 class ValidSections(BaseModel):
     """A list of indexes for valid sections."""
     valid_indexes: List[int] = Field(
-        "List of valid section indexes. Do NOT include sections to remove."
+        ..., description="List of valid section indexes. Do NOT include sections to remove."
     )
 
 
@@ -70,7 +72,7 @@ def annotate_chunks_with_sections(chunks: List[TextNode], sections: List[Section
         c.metadata["sub_section_id"] = cur_sub_section.get_section_id()
 
 
-async def _aget_sections(doc_text: str, llm=None) -> List[SectionOutput]:
+async def _aget_sections(doc_text: str, *, client: AsyncOpenAI, model: str) -> List[SectionOutput]:
     """Extract sections from document text using LLM."""
     system_prompt = """\
     You are an AI document assistant tasked with extracting section metadata from a document text. 
@@ -82,18 +84,17 @@ async def _aget_sections(doc_text: str, llm=None) -> List[SectionOutput]:
 - If there are no sections, do NOT extract any.
 - A Figure or Table does NOT count as a section.
     """
-    llm = llm or OpenAI(model="gpt-4o-mini")
-    sllm = llm.as_structured_llm(SectionsOutput)
-
-    messages = [
-        ChatMessage(content=system_prompt, role="system"),
-        ChatMessage(content=f"Document text: {doc_text}", role="user"),
+    messages: ResponseInputParam = [
+        {"content": system_prompt, "role": "system"},
+        {"content": f"Document text: {doc_text}", "role": "user"},
     ]
-    result = await sllm.achat(messages)
-    return result.raw.sections
+    result = await client.responses.parse(model=model, input=messages, text_format=SectionsOutput)
+    if result.output_parsed is None:
+        raise ValueError("لم يستطع مودل المحادثة تحديد أقسام PDF. راجع المودل من الإعدادات.")
+    return result.output_parsed.sections
 
 
-async def _arefine_sections(sections: List[SectionOutput], llm=None) -> List[SectionOutput]:
+async def _arefine_sections(sections: List[SectionOutput], *, client: AsyncOpenAI, model: str) -> List[SectionOutput]:
     """Refine sections by removing invalid ones."""
     system_prompt = """\
     You are an AI review assistant tasked with reviewing extracted sections from a document.
@@ -104,33 +105,33 @@ async def _arefine_sections(sections: List[SectionOutput], llm=None) -> List[Sec
 
     Return the list of indexes that are valid. Do NOT include indexes to be removed.
     """
-    llm = llm or OpenAI(model="gpt-4o-mini")
-    sllm = llm.as_structured_llm(ValidSections)
-
     section_texts = "\n".join(
         [f"{idx}: {json.dumps(s.model_dump())}" for idx, s in enumerate(sections)]
     )
 
-    messages = [
-        ChatMessage(content=system_prompt, role="system"),
-        ChatMessage(content=f"Sections in text:\n\n{section_texts}", role="user"),
+    messages: ResponseInputParam = [
+        {"content": system_prompt, "role": "system"},
+        {"content": f"Sections in text:\n\n{section_texts}", "role": "user"},
     ]
 
-    result = await sllm.achat(messages)
-    valid_indexes = result.raw.valid_indexes
+    result = await client.responses.parse(model=model, input=messages, text_format=ValidSections)
+    if result.output_parsed is None:
+        raise ValueError("لم يكتمل التحقق من أقسام PDF. حاول مجددًا.")
+    valid_indexes = result.output_parsed.valid_indexes
 
     new_sections = [s for idx, s in enumerate(sections) if idx in valid_indexes]
     return new_sections
 
 
-async def create_sections(text_nodes_dict: dict) -> dict:
+async def create_sections(text_nodes_dict: dict, *, settings: Settings) -> dict:
     """Create sections dictionary from text nodes."""
     sections_dict = {}
-    for paper_path, text_nodes in text_nodes_dict.items():
-        tasks = [_aget_sections(n.get_content(metadata_mode="all")) for n in text_nodes]
-        async_results = await run_jobs(tasks, workers=8, show_progress=True)
-        all_sections = [s for r in async_results for s in r]
-
-        all_sections = await _arefine_sections(all_sections)
-        sections_dict[paper_path] = all_sections
+    async with AsyncOpenAI(api_key=require_openai_key(settings), timeout=60, max_retries=1) as client:
+        for paper_path, text_nodes in text_nodes_dict.items():
+            tasks = [_aget_sections(n.get_content(metadata_mode="all"), client=client, model=settings.agent_model) for n in text_nodes]
+            async_results = await run_jobs(tasks, workers=8, show_progress=True)
+            all_sections = [s for r in async_results for s in r]
+            if all_sections:
+                all_sections = await _arefine_sections(all_sections, client=client, model=settings.agent_model)
+            sections_dict[paper_path] = all_sections
     return sections_dict

@@ -254,6 +254,10 @@ class Library:
     def has_documents(self):
         return bool(self._nodes)
 
+    def update_settings(self, settings):
+        self.settings = settings
+        self._context = None
+
     async def context(self):
         # Called only when the model chooses search; general answers never wait for a writer.
         async with self.mutation_lock:

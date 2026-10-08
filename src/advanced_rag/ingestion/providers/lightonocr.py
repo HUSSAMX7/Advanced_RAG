@@ -102,7 +102,7 @@ async def ocr_pdf(pdf_bytes: bytes, config: dict) -> list[tuple[int, str]]:
     successful: list[tuple[int, str]] = []
     for r in results:
         if isinstance(r, Exception):
-            logger.warning("OCR page failed: %s", r)
+            raise ValueError("فشل استخراج إحدى صفحات PDF باستخدام LightOnOCR؛ لم يتم تدريب نص ناقص.") from r
         else:
             successful.append(r)
 
@@ -332,7 +332,11 @@ async def get_text_nodes_from_lightonocr(
 
     page_results = await ocr_pdf(pdf_bytes, config)
 
-    do_postprocess = config.get("postprocess", True)
+    return pages_to_nodes(page_results, resource_id, file_name, config.get("postprocess", True))
+
+
+def pages_to_nodes(page_results, resource_id, file_name, do_postprocess=True) -> List[TextNode]:
+    """Keep page numbering identical for local and HTTP extraction."""
     nodes: List[TextNode] = []
 
     for page_idx, md_text in page_results:
@@ -341,7 +345,7 @@ async def get_text_nodes_from_lightonocr(
 
         # Skip effectively-empty pages
         meaningful = re.sub(r"[#*_\-\s\n>`|]", "", md_text)
-        if len(meaningful) < 20:
+        if not meaningful:
             logger.info("Skipping empty page %d", page_idx + 1)
             continue
 

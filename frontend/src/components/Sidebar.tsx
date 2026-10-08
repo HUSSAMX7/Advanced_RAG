@@ -1,9 +1,9 @@
-import { BookOpen, ChevronLeft, MessageSquare, Plus, X, PanelRightClose } from 'lucide-react'
+import { BookOpen, ChevronLeft, MessageSquare, Plus, X, PanelRightClose, Settings2 } from 'lucide-react'
 import type { SessionSummary } from '../api'
 import Brand from './Brand'
 
 interface Props {
-  view: 'chat' | 'library'
+  view: 'chat' | 'library' | 'settings'
   sessions: SessionSummary[]
   activeId?: string
   open: boolean
@@ -12,6 +12,7 @@ interface Props {
   connected: boolean
   onClose: () => void
   onLibrary: () => void
+  onSettings: () => void
   onNew: () => void
   onChat: (id: string) => void
 }
@@ -87,6 +88,7 @@ export default function Sidebar(props: Props) {
           )}
         </div>
         <div className="sidebar-bottom">
+          <button className={`nav-item settings-nav ${props.view === 'settings' ? 'selected' : ''}`} onClick={props.onSettings}><Settings2 size={19} /><span>الإعدادات</span></button>
           <div className="library-note">
             <span className="small-orbit">✦</span>
             <div>

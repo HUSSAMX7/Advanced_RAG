@@ -1,5 +1,6 @@
 """Durable library records; file bytes and vectors live outside SQLite."""
 
+import re
 import sqlite3
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -10,7 +11,7 @@ from uuid import uuid4
 LibraryStatus = Literal[
     "untrained", "queued", "training", "cancelling", "trained", "failed", "cancelled"
 ]
-TrainingStage = Literal["extracting", "chunking", "storing"]
+TrainingStage = Literal["extracting", "chunking", "storing", "preparing_ocr"]
 FileIntent = Literal["delete", "unindex"]
 
 
@@ -20,7 +21,7 @@ class FileRecord(TypedDict):
     size: int
     type: str
     status: LibraryStatus
-    stage: TrainingStage | None
+    stage: str | None
     error: str | None
     chunks: int
     created_at: str
@@ -38,7 +39,7 @@ class PublicFile(FileRecord):
 
 class FileChanges(TypedDict, total=False):
     status: LibraryStatus
-    stage: TrainingStage | None
+    stage: str | None
     error: str | None
     chunks: int
     intent: FileIntent | None
@@ -47,11 +48,19 @@ class FileChanges(TypedDict, total=False):
 def validate_lifecycle(values: Mapping[str, object]) -> None:
     for key, allowed in (
         ("status", get_args(LibraryStatus)),
-        ("stage", (*get_args(TrainingStage), None)),
         ("intent", (*get_args(FileIntent), None)),
     ):
         if key in values and values[key] not in allowed:
             raise ValueError(f"Invalid persisted file {key}")
+    stage = values.get("stage")
+    if stage is not None and stage not in get_args(TrainingStage):
+        match = (
+            re.fullmatch(r"ocr_page:([1-9][0-9]*):([1-9][0-9]*)", stage)
+            if isinstance(stage, str)
+            else None
+        )
+        if not match or int(match[1]) > int(match[2]):
+            raise ValueError("Invalid persisted file stage")
 
 
 def record(row: sqlite3.Row) -> StoredFile:

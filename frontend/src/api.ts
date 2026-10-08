@@ -52,6 +52,17 @@ export interface Health {
   doc_available: boolean
 }
 
+export interface AppSettings {
+  pdf_provider: 'llamaparse' | 'lightonocr'
+  agent_model: string
+  embedding_model: string
+  rerank_model: string
+  lightonocr_model: string
+  openai_key_configured: boolean
+  llamaparse_key_configured: boolean
+  embedding_locked: boolean
+}
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, {
     ...init,

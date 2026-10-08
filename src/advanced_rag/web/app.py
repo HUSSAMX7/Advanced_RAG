@@ -7,6 +7,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import FastAPI, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from filelock import FileLock
@@ -19,6 +20,7 @@ from ..config import Settings, require_openai_key
 from ..ingestion.documents import libreoffice_executable, prepare_document
 from ..retrieval.reranking import RerankingError
 from .library import Library, LibraryConflict
+from .settings import SettingsPatch, WebSettings
 
 logger = logging.getLogger(__name__)
 SUPPORTED = {".pdf", ".doc", ".docx", ".txt"}
@@ -29,14 +31,15 @@ class Question(BaseModel):
 
 
 def create_app(settings=None, *, prepare=prepare_document, embed_model=None, answer=ask_agent):
-    settings = settings or Settings()
-    library = Library(settings, prepare=prepare, embed_model=embed_model)
+    web_settings = WebSettings(settings or Settings())
+    runtime_settings: Settings = web_settings.current
+    library = Library(runtime_settings, prepare=prepare, embed_model=embed_model)
     session_locks: dict[str, asyncio.Lock] = {}
 
     @asynccontextmanager
     async def lifespan(app):
         # One web worker owns the durable job queue. CLI writes use the index write lock.
-        lock = FileLock(str(settings.web_data_dir / ".app.lock"))
+        lock = FileLock(str(runtime_settings.web_data_dir / ".app.lock"))
         lock.acquire(timeout=0)
         try:
             await library.start()
@@ -46,6 +49,30 @@ def create_app(settings=None, *, prepare=prepare_document, embed_model=None, ans
             lock.release()
 
     app = FastAPI(title="Advanced RAG Library", lifespan=lifespan)
+
+    @app.exception_handler(RequestValidationError)
+    async def bad_request(request: Request, exc):
+        # Pydantic includes input values by default, which could expose credentials.
+        return JSONResponse({"detail": "قيمة غير صالحة في الطلب. راجع الحقول وحاول مجددًا."}, status_code=422)
+
+    @app.get("/api/settings")
+    async def read_settings():
+        library.list()
+        return {**web_settings.public(), "embedding_locked": library.has_documents}
+
+    @app.put("/api/settings")
+    async def save_settings(body: SettingsPatch):
+        nonlocal runtime_settings
+        if library.mutation_lock.locked() or any(
+            job.task and not job.task.done() for job in library.jobs.values()
+        ) or any(lock.locked() for lock in session_locks.values()):
+            raise LibraryConflict("انتظر اكتمال التدريب أو الإجابة الحالية قبل حفظ الإعدادات.")
+        library.list()
+        if body.embedding_model and body.embedding_model != runtime_settings.embedding_model and library.has_documents:
+            raise LibraryConflict("أزل فهرسة الملفات المدرّبة قبل تغيير مودل embeddings، ثم درّبها مجددًا.")
+        runtime_settings = web_settings.save(body)
+        library.update_settings(runtime_settings)
+        return {**web_settings.public(), "embedding_locked": library.has_documents}
 
     @app.exception_handler(FileNotFoundError)
     async def not_found(request: Request, exc):
@@ -63,8 +90,8 @@ def create_app(settings=None, *, prepare=prepare_document, embed_model=None, ans
     async def health():
         return {
             "status": "ok",
-            "max_upload_bytes": settings.max_upload_bytes,
-            "doc_available": libreoffice_executable(settings) is not None,
+            "max_upload_bytes": runtime_settings.max_upload_bytes,
+            "doc_available": libreoffice_executable(runtime_settings) is not None,
         }
 
     @app.get("/api/files")
@@ -85,7 +112,7 @@ def create_app(settings=None, *, prepare=prepare_document, embed_model=None, ans
             with path.open("wb") as output:
                 while block := await file.read(1024 * 1024):
                     size += len(block)
-                    if size > settings.max_upload_bytes:
+                    if size > runtime_settings.max_upload_bytes:
                         return JSONResponse(
                             {"detail": "حجم الملف أكبر من الحد المسموح."}, status_code=413
                         )
@@ -146,9 +173,9 @@ def create_app(settings=None, *, prepare=prepare_document, embed_model=None, ans
     @app.get("/api/sessions")
     async def sessions():
         summaries = []
-        for path in settings.chat_sessions_dir.glob("*.json"):
+        for path in runtime_settings.chat_sessions_dir.glob("*.json"):
             try:
-                session = load_session(path.stem, settings=settings)
+                session = load_session(path.stem, settings=runtime_settings)
                 summaries.append(session_summary(session, path))
             except (ValueError, FileNotFoundError):
                 logger.warning("Skipping unreadable session file %s", path.name)
@@ -156,17 +183,17 @@ def create_app(settings=None, *, prepare=prepare_document, embed_model=None, ans
 
     @app.post("/api/sessions", status_code=201)
     async def new_session():
-        session = load_session(None, settings=settings)
-        save_session(session, settings=settings)
+        session = load_session(None, settings=runtime_settings)
+        save_session(session, settings=runtime_settings)
         return session
 
     @app.get("/api/sessions/{session_id}")
     async def session(session_id: str):
-        return load_session(session_id, settings=settings)
+        return load_session(session_id, settings=runtime_settings)
 
     @app.post("/api/sessions/{session_id}/messages")
     async def send(session_id: str, body: Question):
-        load_session(session_id, settings=settings)
+        load_session(session_id, settings=runtime_settings)
         if not body.question.strip():
             raise ValueError("اكتب سؤالك أولًا.")
         lock = session_locks.setdefault(session_id, asyncio.Lock())
@@ -180,17 +207,17 @@ def create_app(settings=None, *, prepare=prepare_document, embed_model=None, ans
                         body.question,
                         context=context,
                         client=None,
-                        settings=settings,
+                        settings=runtime_settings,
                         session_id=session_id,
                     )
                 async with AsyncOpenAI(
-                    api_key=require_openai_key(settings), timeout=60, max_retries=1
+                    api_key=require_openai_key(runtime_settings), timeout=60, max_retries=1
                 ) as client:
                     return await answer(
                         body.question,
                         context=context,
                         client=client,
-                        settings=settings,
+                        settings=runtime_settings,
                         session_id=session_id,
                     )
         except RerankingError:

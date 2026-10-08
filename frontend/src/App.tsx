@@ -9,6 +9,7 @@ import {
   RefreshCw,
   X,
   AlertCircle,
+  Settings2,
 } from 'lucide-react'
 import {
   api,
@@ -22,9 +23,10 @@ import {
 import Sidebar from './components/Sidebar'
 import Library from './components/Library'
 import Chat from './components/Chat'
+import Settings from './components/Settings'
 
 export default function App() {
-  const [view, setView] = useState<'chat' | 'library'>('chat')
+  const [view, setView] = useState<'chat' | 'library' | 'settings'>('chat')
   const [files, setFiles] = useState<LibraryFile[]>([])
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [session, setSession] = useState<Session | null>(null)
@@ -91,6 +93,10 @@ export default function App() {
       setSidebarOpen(false)
       if (window.location.hash === '#library') {
         setView('library')
+        return
+      }
+      if (window.location.hash === '#settings') {
+        setView('settings')
         return
       }
       setView('chat')
@@ -280,6 +286,7 @@ export default function App() {
         connected={!!health}
         onClose={() => setSidebarOpen(false)}
         onLibrary={library}
+        onSettings={() => { window.location.hash = 'settings'; setSidebarOpen(false) }}
         onNew={() => void newChat()}
         onChat={chat}
       />
@@ -296,7 +303,7 @@ export default function App() {
             <span>مساحة العمل</span>
             <ChevronLeft size={13} />
             <strong>
-              {view === 'library' ? (
+              {view === 'settings' ? <><Settings2 size={16} /> الإعدادات</> : view === 'library' ? (
                 <>
                   <BookOpen size={16} /> المكتبة
                 </>
@@ -326,7 +333,9 @@ export default function App() {
             </button>
           </div>
         )}
-        {view === 'library' ? (
+        {view === 'settings' ? (
+          <Settings busy={sending || files.some((file) => busyStatus(file.status))} onSaved={() => notify('تم حفظ الإعدادات. ستُستخدم في العمليات القادمة.')} />
+        ) : view === 'library' ? (
           <Library
             files={files}
             health={health}

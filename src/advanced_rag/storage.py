@@ -184,7 +184,8 @@ def store_in_faiss(
                 for node, vector in zip(batch, vectors, strict=True):
                     node.embedding = vector
         new_dimension = len(nodes[0].get_embedding())
-        if dimension and dimension != new_dimension:
+        # An empty corpus has no vectors tying it to the previous model's dimensions.
+        if existing and dimension != new_dimension:
             raise ValueError("Embedding dimension differs from the saved FAISS index")
         if any(len(node.get_embedding()) != new_dimension for node in nodes):
             raise ValueError("Inconsistent embedding dimensions")

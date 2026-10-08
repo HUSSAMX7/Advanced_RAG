@@ -8,6 +8,43 @@ from advanced_rag import Settings
 from advanced_rag.ingestion.documents import prepare_document
 
 
+def test_pdf_sections_use_saved_openai_key_and_chat_model(monkeypatch):
+    from types import SimpleNamespace
+
+    from llama_index.core.schema import TextNode
+    from pydantic import SecretStr
+
+    from advanced_rag.ingestion.chunking import create_chunks
+
+    calls = []
+
+    class FakeOpenAI:
+        def __init__(self, *, api_key, **kwargs):
+            self.api_key = api_key
+            self.responses = self
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def parse(self, *, model, input, text_format):
+            calls.append((model, self.api_key))
+            return SimpleNamespace(output_parsed=text_format(sections=[]))
+
+    monkeypatch.setattr("advanced_rag.ingestion.sections.AsyncOpenAI", FakeOpenAI)
+    settings = Settings(_env_file=None, agent_model="gpt-4o", openai_api_key=SecretStr("web-key"))
+    chunks = asyncio.run(
+        create_chunks(
+            {"notes.pdf": [TextNode(text="Invoice total 120 dollars", metadata={"page_num": 1})]},
+            settings=settings,
+        )
+    )
+    assert chunks[0].text == "Invoice total 120 dollars"
+    assert calls == [("gpt-4o", "web-key")]
+
+
 def test_word_text_and_tables_are_chunked_in_document_order_with_file_identity():
     document = Document()
     document.add_paragraph("مقدمة عن المشروع")

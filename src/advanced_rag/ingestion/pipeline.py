@@ -50,7 +50,7 @@ async def process_pdfs(
     if not all_text_nodes:
         return statuses
     try:
-        chunks = await create_chunks(text_nodes_dict)
+        chunks = await create_chunks(text_nodes_dict, settings=settings)
         if store_nodes is None:
             from ..storage import store_in_faiss
 
