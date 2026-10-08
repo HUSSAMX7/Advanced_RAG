@@ -135,9 +135,7 @@ async def ask_agent(
         if callable(context):
             context = await cast(SearchContextLoader, context)()
         if context is not None:
-            hits = await search_documents(
-                arguments["query"], context=context, client=client, settings=settings
-            )
+            hits = await search_documents(arguments["query"], context=context, settings=settings)
         matches = [{**hit, "citation": i} for i, hit in enumerate(hits, start=1)]
         messages.extend(
             cast(ResponseInputItemParam, item.model_dump(exclude_none=True))

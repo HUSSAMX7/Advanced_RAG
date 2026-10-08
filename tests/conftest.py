@@ -1,4 +1,6 @@
 import json
+import sys
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -30,13 +32,41 @@ def response_payload(data, response_id="resp_test"):
 
 
 @pytest.fixture
-def corpus(tmp_path):
+def local_reranker(monkeypatch, request):
+    state = SimpleNamespace(
+        model_name=f"test-reranker-{request.node.nodeid}", scores=None, calls=[], loads=0
+    )
+
+    class FakeCrossEncoder:
+        def __init__(self, model_name, *, device, max_length):
+            assert model_name == state.model_name
+            assert device == "cpu"
+            assert max_length > 0
+            state.loads += 1
+
+        def predict(self, pairs, *, batch_size, show_progress_bar):
+            state.calls.append(pairs)
+            if state.scores is not None:
+                return state.scores
+            return [
+                2.0 if "١٢٠" in text else 1.0 if "Invoice" in text else 0.0 for _, text in pairs
+            ]
+
+    monkeypatch.setitem(
+        sys.modules, "sentence_transformers", SimpleNamespace(CrossEncoder=FakeCrossEncoder)
+    )
+    return state
+
+
+@pytest.fixture
+def corpus(tmp_path, local_reranker):
     settings = Settings(
         _env_file=None,
         faiss_persist_dir=tmp_path / "index",
         chat_sessions_dir=tmp_path / "sessions",
         retrieval_candidates=2,
         retrieval_top_k=1,
+        rerank_model=local_reranker.model_name,
     )
     embedding = MockEmbedding(embed_dim=2)
     store_in_faiss(

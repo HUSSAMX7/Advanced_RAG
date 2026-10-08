@@ -9,6 +9,7 @@ from llama_index.core.schema import TextNode
 
 from advanced_rag import Settings
 from advanced_rag.agent.sessions import load_session, save_session
+from advanced_rag.retrieval.reranking import RerankingError
 from advanced_rag.storage import load_faiss_index
 from advanced_rag.web.app import create_app
 
@@ -192,6 +193,23 @@ def test_general_chat_does_not_wait_for_first_file_training(tmp_path):
             request_thread.join(timeout=5)
         assert responses[0].status_code == 200
         wait_status(client, row["id"], "trained")
+
+
+def test_local_reranker_failure_has_a_local_model_error_and_saves_no_turn(tmp_path):
+    settings = web_settings(tmp_path)
+
+    async def answer(question, **kwargs):
+        raise RerankingError("Model cache unavailable")
+
+    with TestClient(create_app(settings, answer=answer)) as client:
+        session_id = client.post("/api/sessions").json()["session_id"]
+        response = client.post(
+            f"/api/sessions/{session_id}/messages", json={"question": "Question"}
+        )
+        assert response.status_code == 502
+        assert "BGE" in response.json()["detail"]
+        assert "المودل المحلي" in response.json()["detail"]
+        assert client.get(f"/api/sessions/{session_id}").json()["turns"] == []
 
 
 def test_general_chat_and_polling_work_during_embeddings_with_an_existing_library(tmp_path):

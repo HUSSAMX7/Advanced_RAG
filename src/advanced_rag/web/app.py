@@ -17,6 +17,7 @@ from ..agent import ask_agent
 from ..agent.sessions import load_session, save_session
 from ..config import Settings, require_openai_key
 from ..ingestion.documents import libreoffice_executable, prepare_document
+from ..retrieval.reranking import RerankingError
 from .library import Library, LibraryConflict
 
 logger = logging.getLogger(__name__)
@@ -192,6 +193,14 @@ def create_app(settings=None, *, prepare=prepare_document, embed_model=None, ans
                         settings=settings,
                         session_id=session_id,
                     )
+        except RerankingError:
+            logger.exception("Local document reranking failed")
+            return JSONResponse(
+                {
+                    "detail": "تعذر ترتيب نتائج الملفات بالمودل المحلي BGE. تأكد من اكتمال تنزيل النموذج وتوفر ذاكرة كافية، ثم أعد المحاولة."
+                },
+                status_code=502,
+            )
         except (OpenAIError, RuntimeError):
             logger.exception("Chat request failed")
             return JSONResponse(

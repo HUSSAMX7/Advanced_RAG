@@ -20,7 +20,7 @@ src/advanced_rag/
 │   ├── sections.py          # استخراج الأقسام ومراجعتها وربطها الأصلي
 │   ├── chunking.py          # create_chunks: الأقسام ثم SentenceSplitter
 │   └── pipeline.py          # الاستخراج ثم تجهيز المقاطع ثم الحفظ
-├── retrieval/                # FAISS + BM25 + RRF ثم reranking عبر OpenAI
+├── retrieval/                # FAISS + BM25 + RRF ثم BGE reranking محلي
 ├── agent/                    # إيجنت OpenAI وشات الطرفية وحفظ الجلسات
 ├── storage.py                # embeddings وحفظ فهرس FAISS وتحميله
 ├── models.py                 # بيانات الملف وحالة المعالجة
@@ -93,6 +93,12 @@ Copy-Item .env.example .env
 - `llamaparse`: اضبط `LLAMA_PARSE_API_KEY`.
 - `lightonocr`: اضبط `LIGHTONOCR_URL` لعنوان خادم النموذج.
 
+`LIGHTONOCR_URL` يمكن أن يكون محليًا، مثل
+`http://localhost:8000/v1/chat/completions`. المشروع يتصل بخادم منفصل يشغّل
+LightOnOCR (واجهة متوافقة مع OpenAI، مثل vLLM) حتى عندما يعمل على نفس الجهاز.
+كتابة العنوان لا تشغّل خادم OCR؛ يجب تشغيله أولًا. يستخدمه استخراج PDF فقط عند
+اختيار `PDF_PROVIDER=lightonocr` أو تمرير `--provider lightonocr`.
+
 ```powershell
 uv run main.py "D:/documents/report.pdf"
 uv run main.py "D:/documents/report.pdf" --provider lightonocr
@@ -142,12 +148,22 @@ uv run advanced-rag-chat --persist-dir storage/pdf_documents --sessions-dir chat
 
 يجيب المودل عن الأسئلة العامة مباشرة. أداة `search_documents` تبحث عند الحاجة
 مرة واحدة لكل سؤال متعلق بملفاتك في جميع ملفات الفهرس. تجمع حتى
-20 نتيجة من المتجهات و20 من الكلمات، تدمجها بـRRF، ثم ترتّب أفضل 20 عبر OpenAI
+20 نتيجة من المتجهات و20 من الكلمات، تدمجها بـRRF، ثم ترتّب أفضل 20 عبر BGE محليًا
 وترجع أفضل 5. يستخدم الإيجنت OpenAI SDK مباشرة دون LangChain أو Agents SDK.
 بحث واحد لا يعني طلب OpenAI واحدًا: توجد طلبات صياغة استعلام الأداة، embedding
-للسؤال، reranking، وتوليد الإجابة.
+للسؤال وتوليد الإجابة؛ ترتيب النتائج محلي ولا يستدعي OpenAI.
 
-`AGENT_MODEL` و`RERANK_MODEL` افتراضيًا `gpt-4o-mini`. يمكن تعديل أعداد النتائج عبر
+`AGENT_MODEL` افتراضيًا `gpt-4o-mini`، و`RERANK_MODEL` افتراضيًا
+`BAAI/bge-reranker-v2-m3` ([صفحة النموذج](https://huggingface.co/BAAI/bge-reranker-v2-m3)).
+يشغّل BGE عبر `sentence-transformers` على CPU، ويحمّله مرة واحدة عند أول بحث
+ويحتفظ به في الذاكرة. تنزيل الأوزان أول مرة يحتاج اتصالًا بالإنترنت؛ التشغيل
+التالي يستخدم ذاكرة Hugging Face المحلية. يمكن وضع مسار مجلد نموذج محلي في
+`RERANK_MODEL`. إصدار PyTorch المثبت مخصص للمعالج.
+`RERANK_BATCH_SIZE` افتراضيًا 1 لتقليل الذاكرة، و`RERANK_MAX_LENGTH` افتراضيًا
+2048 رمزًا لكل زوج سؤال/مقطع؛ النصوص الأطول تُقتطع أثناء تقييم الصلة، وتبقى
+المقاطع الأصلية كاملة في الإجابة. قد يكون الترتيب بطيئًا على CPU؛ ينفّذ خارج
+حلقة الخادم، بالتتابع لمنع تحميل نسخ متعددة من النموذج.
+يمكن تعديل أعداد النتائج عبر
 `RETRIEVAL_CANDIDATES` و`RETRIEVAL_TOP_K`. تطبيع الكلمات العربية والإنجليزية يحدث
 داخل البحث اللفظي فقط؛ النص الأصلي والأرقام والتواريخ تبقى كما هي. يُبنى BM25 من
 الفهرس عند بدء الشات؛ أعد فتح الشات بعد إضافة مستندات جديدة.

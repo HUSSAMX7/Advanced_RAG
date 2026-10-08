@@ -26,7 +26,9 @@ class Settings(BaseSettings):
     faiss_persist_dir: Path = Path("storage/pdf_documents")
     embedding_model: str = "text-embedding-3-small"
     agent_model: str = "gpt-4o-mini"
-    rerank_model: str = "gpt-4o-mini"
+    rerank_model: str = "BAAI/bge-reranker-v2-m3"
+    rerank_batch_size: int = Field(default=1, gt=0)
+    rerank_max_length: int = Field(default=2048, gt=0, le=8192)
     retrieval_candidates: int = Field(default=20, gt=0)
     retrieval_top_k: int = Field(default=5, gt=0)
     chat_sessions_dir: Path = Path("chat_sessions")

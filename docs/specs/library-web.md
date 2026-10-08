@@ -19,6 +19,9 @@ Baseline: `9143356`. Build on the existing ingestion and chat functions.
   page numbers where applicable, and supporting excerpts when available.
 - Refresh retrieval after every corpus change. Preserve past conversations
   when a source is deleted, marking its source as unavailable.
+- Rerank retrieved excerpts locally with BAAI/bge-reranker-v2-m3 on CPU.
+  Cache the model, serialize inference off the event loop, preserve source metadata,
+  and fail clearly on unavailable models or invalid scores. General chat skips reranking.
 - Persist uploads/statuses in SQLite and retain existing JSON chat sessions.
   Use staged index generations with atomic publication and startup recovery.
 - Existing PDF CLI and retrieval CLI stay compatible with persisted indexes.

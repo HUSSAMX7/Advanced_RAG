@@ -3,7 +3,6 @@
 import re
 from collections import defaultdict
 
-from openai import AsyncOpenAI
 from rank_bm25 import BM25Okapi
 
 from ..config import Settings
@@ -52,7 +51,6 @@ async def search_documents(
     query: str,
     *,
     context: SearchContext,
-    client: AsyncOpenAI,
     settings: Settings,
 ) -> list[SearchHit]:
     """Search all documents, fuse rankings, and return reranked text with metadata."""
@@ -85,5 +83,5 @@ async def search_documents(
         }
         for chunk_id in selected
     ]
-    ranked = await rerank_chunks(query, candidates, client=client, settings=settings)
+    ranked = await rerank_chunks(query, candidates, settings=settings)
     return ranked[: settings.retrieval_top_k]

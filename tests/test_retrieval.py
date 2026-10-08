@@ -1,9 +1,6 @@
 import asyncio
-import json
 
-import httpx
 import pytest
-from conftest import api_client, response_payload
 from llama_index.core.schema import TextNode
 
 from advanced_rag.retrieval import load_search_context, search_documents
@@ -14,19 +11,8 @@ def test_hybrid_search_can_rerank_an_exact_identifier_ahead_of_a_semantic_hit(co
     settings, embedding = corpus
     context = load_search_context(settings, embed_model=embedding)
 
-    def respond(request):
-        body = json.loads(request.content)
-        candidates = json.loads(body["input"][0]["content"])["candidates"]
-        assert {hit["chunk_id"] for hit in candidates} == {"identifier", "semantic"}
-        return httpx.Response(
-            200, json=response_payload({"ordered_ids": ["identifier", "semantic"]})
-        )
-
     async def run():
-        async with api_client(respond) as client:
-            return await search_documents(
-                "ZX-774", context=context, client=client, settings=settings
-            )
+        return await search_documents("ZX-774", context=context, settings=settings)
 
     hits = asyncio.run(run())
     assert [hit["chunk_id"] for hit in hits] == ["identifier"]
@@ -51,59 +37,41 @@ def test_arabic_keyword_normalization_preserves_original_excerpt_values(corpus):
     )
     context = load_search_context(settings, embed_model=embedding)
 
-    def respond(request):
-        candidates = json.loads(json.loads(request.content)["input"][0]["content"])["candidates"]
-        assert {hit["chunk_id"] for hit in candidates} == {"arabic", "semantic"}
-        return httpx.Response(200, json=response_payload({"ordered_ids": ["arabic", "semantic"]}))
-
     async def run():
-        async with api_client(respond) as client:
-            return await search_documents(
-                "اسعار", context=context, client=client, settings=settings
-            )
+        return await search_documents("اسعار", context=context, settings=settings)
 
     assert asyncio.run(run())[0]["text"] == original
 
 
-@pytest.mark.parametrize(
-    "ranking",
-    [
-        {"ordered_ids": ["identifier", "identifier"]},
-        {"ordered_ids": ["fabricated", "semantic"]},
-        {"ordered_ids": ["identifier"]},
-        {"ordered_ids": None},
-    ],
-)
-def test_invalid_reranking_fails_instead_of_returning_unranked_results(corpus, ranking):
+@pytest.mark.parametrize("scores", [[0.5], [0.5, float("nan")], [float("inf"), 0.1], ["bad", 0.1]])
+def test_invalid_local_scores_fail_instead_of_returning_unranked_results(
+    corpus, local_reranker, scores
+):
     settings, embedding = corpus
     context = load_search_context(settings, embed_model=embedding)
+    local_reranker.scores = scores
 
-    async def run():
-        async with api_client(
-            lambda request: httpx.Response(200, json=response_payload(ranking))
-        ) as client:
-            return await search_documents(
-                "ZX-774", context=context, client=client, settings=settings
-            )
-
-    with pytest.raises(RuntimeError, match="invalid ranking"):
-        asyncio.run(run())
+    with pytest.raises(RuntimeError, match="invalid relevance scores"):
+        asyncio.run(search_documents("ZX-774", context=context, settings=settings))
 
 
-def test_incomplete_reranking_is_a_failure(corpus):
+def test_local_reranker_is_reused_and_ties_preserve_retrieval_order(corpus, local_reranker):
     settings, embedding = corpus
+    settings.retrieval_top_k = 2
     context = load_search_context(settings, embed_model=embedding)
-    payload = response_payload({"ordered_ids": ["identifier", "semantic"]})
-    payload["status"] = "incomplete"
+    local_reranker.scores = [1.0, 1.0]
 
     async def run():
-        async with api_client(lambda request: httpx.Response(200, json=payload)) as client:
-            return await search_documents(
-                "ZX-774", context=context, client=client, settings=settings
-            )
+        first = await search_documents("ZX-774", context=context, settings=settings)
+        second = await search_documents("ZX-774", context=context, settings=settings)
+        return first, second
 
-    with pytest.raises(RuntimeError, match="did not complete"):
-        asyncio.run(run())
+    first, second = asyncio.run(run())
+    assert [hit["chunk_id"] for hit in first] == ["identifier", "semantic"]
+    assert first == second
+    assert local_reranker.loads == 1
+    assert len(local_reranker.calls) == 2
+    assert all(query == "ZX-774" for query, _ in local_reranker.calls[0])
 
 
 def test_missing_index_has_a_clear_error(corpus, tmp_path):

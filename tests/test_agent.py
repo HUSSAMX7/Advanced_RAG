@@ -26,7 +26,9 @@ def tool_response(query):
 
 
 @pytest.mark.parametrize("with_documents", [False, True])
-def test_general_questions_do_not_require_training_or_search_and_can_resume(corpus, with_documents):
+def test_general_questions_do_not_require_training_or_search_and_can_resume(
+    corpus, with_documents, local_reranker
+):
     settings, embedding = corpus
     context = load_search_context(settings, embed_model=embedding) if with_documents else None
     requests = []
@@ -63,6 +65,7 @@ def test_general_questions_do_not_require_training_or_search_and_can_resume(corp
     assert answer["sources"] == []
     assert len(requests) == 2
     assert len(load_session(answer["session_id"], settings=settings)["turns"]) == 2
+    assert local_reranker.calls == []
 
 
 def test_general_answer_cannot_claim_a_document_source(corpus):
@@ -136,10 +139,6 @@ def test_agent_answers_with_a_real_source_and_saves_a_resumable_session(corpus, 
         requests.append(body)
         if len(requests) == 1:
             return httpx.Response(200, json=tool_response("ZX-774"))
-        if len(requests) == 2:
-            return httpx.Response(
-                200, json=response_payload({"ordered_ids": ["identifier", "semantic"]})
-            )
         assert body["tool_choice"] == "none"
         output = next(item for item in body["input"] if item.get("type") == "function_call_output")
         assert output["call_id"] == "call_search"
@@ -176,7 +175,7 @@ def test_agent_answers_with_a_real_source_and_saves_a_resumable_session(corpus, 
         load_session(answer["session_id"], settings=settings)["turns"][0]["question"]
         == "كم قيمة ZX-774؟"
     )
-    assert len(requests) == 3
+    assert len(requests) == 2
     assert len(loads) == (1 if lazy else 0)
 
 
@@ -199,10 +198,6 @@ def test_resumed_followup_uses_recent_history_and_keeps_all_saved_turns(corpus):
             assert users == [*(f"Earlier {i}" for i in range(2, 12)), "Which currency was that?"]
             assert "ZX-774" in json.dumps(body["input"])
             return httpx.Response(200, json=tool_response("ZX-774"))
-        if len(requests) == 2:
-            return httpx.Response(
-                200, json=response_payload({"ordered_ids": ["identifier", "semantic"]})
-            )
         return httpx.Response(
             200,
             json=response_payload(
@@ -252,13 +247,7 @@ def test_invalid_answer_does_not_change_a_saved_session(corpus, data):
 
     def respond(request):
         requests.append(request)
-        payload = (
-            tool_response("ZX-774")
-            if len(requests) == 1
-            else response_payload({"ordered_ids": ["identifier", "semantic"]})
-            if len(requests) == 2
-            else response_payload(data)
-        )
+        payload = tool_response("ZX-774") if len(requests) == 1 else response_payload(data)
         return httpx.Response(200, json=payload)
 
     async def run():
@@ -301,8 +290,6 @@ def test_insufficient_evidence_is_saved_as_an_answer_without_sources(corpus):
         payload = (
             tool_response("ZX-774")
             if len(requests) == 1
-            else response_payload({"ordered_ids": ["identifier", "semantic"]})
-            if len(requests) == 2
             else response_payload(
                 {
                     "answer": "I could not find the invoice owner's age in the documents.",
@@ -350,8 +337,6 @@ def test_uncited_claim_is_not_returned_or_saved_as_a_supported_answer(corpus):
         payload = (
             tool_response("ZX-774")
             if len(requests) == 1
-            else response_payload({"ordered_ids": ["identifier", "semantic"]})
-            if len(requests) == 2
             else response_payload(
                 {"answer": "The invoice costs 999 dollars.", "cited_chunk_ids": []}
             )
