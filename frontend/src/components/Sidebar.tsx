@@ -1,4 +1,4 @@
-import { BookOpen, ChevronLeft, MessageSquare, Plus, X, PanelRightClose, Settings2 } from 'lucide-react'
+import { BookOpen, ChevronLeft, Loader2, MessageSquare, Plus, RefreshCw, X, PanelRightClose, Settings2 } from 'lucide-react'
 import type { SessionSummary } from '../api'
 import Brand from './Brand'
 
@@ -15,6 +15,7 @@ interface Props {
   onSettings: () => void
   onNew: () => void
   onChat: (id: string) => void
+  onRetryTitle: (id: string) => void
 }
 
 export default function Sidebar(props: Props) {
@@ -74,16 +75,32 @@ export default function Sidebar(props: Props) {
             <p className="history-empty">محادثاتك القادمة تبدأ هنا.</p>
           ) : (
             props.sessions.map((session) => (
+              <div className="history-row" key={session.id}>
               <button
-                key={session.id}
                 disabled={props.sending}
                 className={`history-item ${props.view === 'chat' && session.id === props.activeId ? 'active' : ''}`}
                 onClick={() => props.onChat(session.id)}
-                title={session.title}
+                title={session.title_status === 'pending' ? 'جارٍ تسمية المحادثة' : session.title}
+                aria-label={session.title_status === 'pending' ? 'جارٍ تسمية المحادثة' : session.title}
+                aria-busy={session.title_status === 'pending'}
               >
-                <MessageSquare size={16} />
-                <span>{session.title}</span>
+                {session.title_status === 'pending' ? (
+                  <>
+                    <Loader2 size={16} className="spin" />
+                    <span className="title-skeleton" aria-hidden="true" />
+                  </>
+                ) : <>
+                  <MessageSquare size={16} />
+                  <span>{session.title}</span>
+                </>}
               </button>
+              {session.title_status === 'error' && (
+                <button className="icon-button title-retry" aria-label="إعادة توليد عنوان المحادثة"
+                  title="إعادة توليد العنوان" onClick={() => props.onRetryTitle(session.id)}>
+                  <RefreshCw size={14} />
+                </button>
+              )}
+              </div>
             ))
           )}
         </div>

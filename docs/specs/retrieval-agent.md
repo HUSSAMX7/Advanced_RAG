@@ -20,12 +20,15 @@ Approved in the chat before implementation. Review baseline:
 - Insufficient evidence must yield a clear non-answer with no citations. Invalid rankings,
   unknown or inconsistent citations, incomplete responses, and API failures are errors,
   without silently bypassing reranking or saving failed turns.
-- Persist successful turns locally as JSON, resume by UUID, retain all turns and send only
-  the latest 10 exchanges as context. An explicitly missing session is an error.
+- Persist successful turns locally as JSON, resume by UUID, retain all turns and send the
+  complete conversation history as context. On context overflow, persist a summary of older
+  turns alongside a successful answer and keep the latest 10 exchanges in full. Reuse and
+  extend this summary as needed without removing saved turns. See [session memory](session-memory.md).
+  An explicitly missing session is an error.
 - Add `advanced-rag-chat` with interactive chat, `--question`, `--session`, `--persist-dir`,
   and `--sessions-dir`. Preserve the existing PDF CLI. No HTTP API or web search.
 - Defaults: `gpt-4o-mini` for agent and reranking (separately configurable), `store=False`,
   `chat_sessions/` for local session files excluded from Git, original embedding model.
 - Verify through public interfaces using real temporary FAISS indexes and mocked external
   OpenAI HTTP responses. Cover hybrid search, normalization, reranking validation, sources,
-  one search per question, session resume/history window, CLI, and failures.
+  one search per question, session resume/full history, context compaction, CLI, and failures.

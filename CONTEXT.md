@@ -7,6 +7,12 @@
 - **Remove indexing**: exclude a trained document from search, retaining the file.
 - **Delete file**: remove the file and all its indexed chunks from the library.
 - **Conversation**: a saved sequence of questions, answers and source references.
+- **Conversation history (session memory)**: the earlier saved questions, answers
+  and source references belonging to the same conversation. It provides context
+  for follow-up questions; earlier answers are not original document evidence.
+- **Conversation summary**: a condensed account of older conversation history,
+  preserving context for later exchanges. It is distinct from the original saved
+  messages and from document evidence.
 - **Source**: an original document excerpt or visual supporting a particular answer.
 - **PDF extraction provider**: the selected service or model that reads a PDF
   into text before the document is trained for library search.

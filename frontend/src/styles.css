@@ -257,6 +257,30 @@ button {
 .history-item svg {
   color: #98a396;
 }
+.history-row { display: flex; align-items: center; }
+.history-row .history-item { min-width: 0; flex: 1; }
+.title-retry { flex-shrink: 0; }
+.conversation-title-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.title-skeleton {
+  display: inline-block;
+  width: 110px;
+  height: 10px;
+  border-radius: 5px;
+  background: linear-gradient(90deg, #dfe8dc 25%, #f0f5ed 50%, #dfe8dc 75%);
+  background-size: 200% 100%;
+  animation: title-shimmer 1.5s ease-in-out infinite;
+}
+@keyframes title-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .title-skeleton { animation: none; }
+}
 .history-item:hover,
 .history-item.active {
   background: #e7ede4;

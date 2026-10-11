@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 
 from ..config import Settings
 
-MODEL_FIELDS = ("agent_model", "embedding_model", "rerank_model", "lightonocr_model")
+MODEL_FIELDS = ("agent_model", "title_model", "embedding_model", "rerank_model", "lightonocr_model")
 KEY_FIELDS = ("openai_api_key", "llama_parse_api_key")
 PUBLIC_FIELDS = ("pdf_provider", *MODEL_FIELDS)
 
@@ -22,6 +22,7 @@ class SettingsPatch(BaseModel):
 
     pdf_provider: Literal["llamaparse", "lightonocr"] | None = None
     agent_model: str | None = Field(default=None, min_length=1, max_length=512)
+    title_model: str | None = Field(default=None, min_length=1, max_length=512)
     embedding_model: str | None = Field(default=None, min_length=1, max_length=512)
     rerank_model: str | None = Field(default=None, min_length=1, max_length=512)
     lightonocr_model: str | None = Field(default=None, min_length=1, max_length=512)

@@ -179,7 +179,7 @@ def test_agent_answers_with_a_real_source_and_saves_a_resumable_session(corpus, 
     assert len(loads) == (1 if lazy else 0)
 
 
-def test_resumed_followup_uses_recent_history_and_keeps_all_saved_turns(corpus):
+def test_resumed_followup_sends_all_history_in_both_requests_and_keeps_all_saved_turns(corpus):
     settings, embedding = corpus
     context = load_search_context(settings, embed_model=embedding)
     session = load_session(None, settings=settings)
@@ -193,9 +193,25 @@ def test_resumed_followup_uses_recent_history_and_keeps_all_saved_turns(corpus):
     def respond(request):
         body = json.loads(request.content)
         requests.append(body)
+        history = body["input"][:24]
+        assert history == [
+            message
+            for turn in session["turns"]
+            for message in (
+                {"role": "user", "content": turn["question"]},
+                {
+                    "role": "assistant",
+                    "content": json.dumps(
+                        {"answer": turn["answer"], "sources": turn["sources"]},
+                        ensure_ascii=False,
+                    ),
+                },
+            )
+        ]
+        users = [item["content"] for item in body["input"] if item.get("role") == "user"]
+        assert users == [*(f"Earlier {i}" for i in range(12)), "Which currency was that?"]
+        assert body["truncation"] == "disabled"
         if len(requests) == 1:
-            users = [item["content"] for item in body["input"] if item.get("role") == "user"]
-            assert users == [*(f"Earlier {i}" for i in range(2, 12)), "Which currency was that?"]
             assert "ZX-774" in json.dumps(body["input"])
             return httpx.Response(200, json=tool_response("ZX-774"))
         return httpx.Response(

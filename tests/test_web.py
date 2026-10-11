@@ -212,6 +212,34 @@ def test_local_reranker_failure_has_a_local_model_error_and_saves_no_turn(tmp_pa
         assert client.get(f"/api/sessions/{session_id}").json()["turns"] == []
 
 
+def test_context_capacity_error_is_actionable_in_web_and_preserves_history(tmp_path, monkeypatch):
+    import httpx
+    from conftest import api_client
+    from pydantic import SecretStr
+
+    settings = web_settings(tmp_path).model_copy(update={"openai_api_key": SecretStr("test-key")})
+    session = load_session(None, settings=settings)
+    session["turns"] = [
+        {"question": f"Question {i}", "answer": f"Answer {i}", "sources": []} for i in range(10)
+    ]
+    save_session(session, settings=settings)
+
+    def respond(request):
+        return httpx.Response(
+            400,
+            json={"error": {"message": "Input exceeds context", "code": "context_length_exceeded"}},
+        )
+
+    monkeypatch.setattr("advanced_rag.web.app.AsyncOpenAI", lambda **kwargs: api_client(respond))
+    with TestClient(create_app(settings)) as client:
+        response = client.post(
+            f"/api/sessions/{session['session_id']}/messages", json={"question": "Follow up"}
+        )
+        assert response.status_code == 422
+        assert "سعة المودل" in response.json()["detail"]
+        assert client.get(f"/api/sessions/{session['session_id']}").json() == session
+
+
 def test_general_chat_and_polling_work_during_embeddings_with_an_existing_library(tmp_path):
     settings = web_settings(tmp_path)
     block = threading.Event()

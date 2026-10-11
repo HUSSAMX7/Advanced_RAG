@@ -44,6 +44,7 @@ export default function App() {
   const currentSession = useRef<Session | null>(null)
   const requestedSession = useRef<string | null>(null)
   const connectedOnce = useRef(false)
+  const startingTitles = useRef(new Set<string>())
   const trained = files.filter((file) => file.status === 'trained').length
   useEffect(() => {
     currentSession.current = session
@@ -59,7 +60,21 @@ export default function App() {
           api<Health>('/health'),
         ])
         setFiles(newFiles)
-        setSessions(newSessions)
+        const summaries = newSessions.map((item) => {
+          if (item.title_status === 'ready' || item.title_status === 'error') startingTitles.current.delete(item.id)
+          return startingTitles.current.has(item.id) && item.title_status === 'idle'
+            ? { ...item, title_status: 'pending' as const }
+            : item
+        })
+        setSessions(summaries)
+        setSession((previous) => {
+          if (!previous) return previous
+          const summary = summaries.find((item) => item.id === previous.session_id)
+          if (!summary) return previous
+          const updated = { ...previous, title: summary.title, title_status: summary.title_status }
+          currentSession.current = updated
+          return updated
+        })
         setHealth(newHealth)
         connectedOnce.current = true
       } catch {
@@ -83,10 +98,11 @@ export default function App() {
       () => {
         void refresh(true)
       },
-      files.some((file) => busyStatus(file.status)) ? 2000 : 10000,
+      sessions.some((item) => item.title_status === 'pending') || (sending && pending)
+        ? 700 : files.some((file) => busyStatus(file.status)) ? 2000 : 10000,
     )
     return () => clearInterval(timer)
-  }, [files, refresh])
+  }, [files, sessions, sending, pending, refresh])
   useEffect(() => {
     async function route() {
       const ticket = ++routeTicket.current
@@ -160,6 +176,19 @@ export default function App() {
     }
   }
 
+  async function retryTitle(id: string) {
+    setSessions((previous) => previous.map((item) => item.id === id
+      ? { ...item, title_status: 'pending' } : item))
+    setSession((previous) => previous?.session_id === id
+      ? { ...previous, title_status: 'pending' } : previous)
+    try {
+      await api(`/sessions/${encodeURIComponent(id)}/title`, { method: 'POST' })
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'تعذر توليد العنوان.', true)
+    }
+    await refresh(true)
+  }
+
   async function send(question: string): Promise<{ success: boolean; restoreDraft: boolean }> {
     if (sendLock.current) return { success: false, restoreDraft: true }
     const initialRoute = window.location.hash
@@ -168,10 +197,23 @@ export default function App() {
     setSending(true)
     setPending(question)
     setPendingSession(originId)
+    function markTitleStarting(value: Session): Session {
+      if (value.turns.length || value.title_status !== 'idle') return value
+      startingTitles.current.add(value.session_id)
+      const updated = { ...value, title_status: 'pending' as const }
+      setSessions((previous) => {
+        const summary: SessionSummary = {
+          id: value.session_id, title: value.title, title_status: 'pending',
+          turns: 0, updated_at: Date.now() / 1000,
+        }
+        return [summary, ...previous.filter((item) => item.id !== value.session_id)]
+      })
+      return updated
+    }
     try {
       let current = session
       if (!current) {
-        current = await api<Session>('/sessions', { method: 'POST' })
+        current = markTitleStarting(await api<Session>('/sessions', { method: 'POST' }))
         originId = current.session_id
         setPendingSession(originId)
         if (window.location.hash === initialRoute) {
@@ -180,13 +222,23 @@ export default function App() {
           setSession(current)
           chat(current.session_id)
         }
+      } else {
+        current = markTitleStarting(current)
+        currentSession.current = current
+        setSession(current)
       }
-      const result = await api<{ answer: string; sources: Turn['sources']; session_id: string }>(
+      const result = await api<{ answer: string; sources: Turn['sources']; session_id: string; title: string; title_status: Session['title_status'] }>(
         `/sessions/${current.session_id}/messages`,
         { method: 'POST', body: JSON.stringify({ question }) },
       )
+      const latest = currentSession.current?.session_id === current.session_id
+        ? currentSession.current : current
+      const title = latest.title_status === 'ready' && result.title_status === 'pending'
+        ? latest : result
       const updated = {
-        session_id: current.session_id,
+        ...current,
+        title: title.title,
+        title_status: title.title_status,
         turns: [...current.turns, { question, answer: result.answer, sources: result.sources }],
       }
       if (requestedSession.current === current.session_id) {
@@ -196,6 +248,8 @@ export default function App() {
       await refresh(true)
       return { success: true, restoreDraft: false }
     } catch (error) {
+      if (originId) startingTitles.current.delete(originId)
+      await refresh(true)
       notify(error instanceof Error ? error.message : 'تعذر إرسال الرسالة.', true)
       return { success: false, restoreDraft: requestedSession.current === originId }
     } finally {
@@ -289,6 +343,7 @@ export default function App() {
         onSettings={() => { window.location.hash = 'settings'; setSidebarOpen(false) }}
         onNew={() => void newChat()}
         onChat={chat}
+        onRetryTitle={(id) => void retryTitle(id)}
       />
       <main className="main-panel">
         <header className="topbar">
@@ -308,9 +363,14 @@ export default function App() {
                   <BookOpen size={16} /> المكتبة
                 </>
               ) : (
-                <>
+                session?.title_status === 'pending' || (sending && pending && !session) ? (
+                  <span className="conversation-title-loading" role="status" aria-label="جارٍ تسمية المحادثة">
+                    <Loader2 size={16} className="spin" />
+                    <span className="title-skeleton" aria-hidden="true" />
+                  </span>
+                ) : <>
                   <MessageSquare size={16} />{' '}
-                  {session?.turns[0]?.question.slice(0, 40) ?? 'محادثة جديدة'}
+                  {session?.title ?? 'محادثة جديدة'}
                 </>
               )}
             </strong>

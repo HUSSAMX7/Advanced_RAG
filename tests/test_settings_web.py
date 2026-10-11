@@ -23,6 +23,7 @@ def test_saved_settings_are_applied_and_keys_are_protected_after_restart(tmp_pat
             json={
                 "pdf_provider": "lightonocr",
                 "agent_model": "gpt-4o",
+                "title_model": "gpt-4o-mini",
                 "openai_api_key": "private-openai-key",
                 "llama_parse_api_key": "private-parse-key",
             },
@@ -43,6 +44,7 @@ def test_saved_settings_are_applied_and_keys_are_protected_after_restart(tmp_pat
         current = client.get("/api/settings").json()
         assert current["pdf_provider"] == "lightonocr"
         assert current["agent_model"] == "gpt-4o"
+        assert current["title_model"] == "gpt-4o-mini"
         session = client.post("/api/sessions").json()
         client.post(f"/api/sessions/{session['session_id']}/messages", json={"question": "hi"})
     assert seen == [("gpt-4o", "private-openai-key")] * 2
@@ -115,6 +117,7 @@ def test_bad_settings_never_echo_secret_input(tmp_path):
             client.put("/api/settings", json={"faiss_persist_dir": "elsewhere"}).status_code == 422
         )
         assert client.put("/api/settings", json={"agent_model": "   "}).status_code == 422
+        assert client.put("/api/settings", json={"title_model": "   "}).status_code == 422
 
 
 def test_training_receives_saved_provider_and_credentials(tmp_path):

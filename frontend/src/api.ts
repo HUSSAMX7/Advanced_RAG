@@ -32,11 +32,14 @@ export interface Turn {
 }
 export interface Session {
   session_id: string
+  title: string
+  title_status: 'idle' | 'pending' | 'ready' | 'error'
   turns: Turn[]
 }
 export interface SessionSummary {
   id: string
   title: string
+  title_status: Session['title_status']
   turns: number
   updated_at: number
 }
@@ -63,6 +66,7 @@ export interface Health {
 export interface AppSettings {
   pdf_provider: 'llamaparse' | 'lightonocr'
   agent_model: string
+  title_model: string
   embedding_model: string
   rerank_model: string
   lightonocr_model: string

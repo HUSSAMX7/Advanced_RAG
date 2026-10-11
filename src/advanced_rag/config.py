@@ -27,7 +27,8 @@ class Settings(BaseSettings):
     lightonocr_postprocess: bool = True
     faiss_persist_dir: Path = Path("storage/pdf_documents")
     embedding_model: str = "text-embedding-3-small"
-    agent_model: str = "gpt-4o-mini"
+    agent_model: str = "gpt-6-luna"
+    title_model: str = "gpt-6-luna"
     rerank_model: str = "BAAI/bge-reranker-v2-m3"
     rerank_batch_size: int = Field(default=1, gt=0)
     rerank_max_length: int = Field(default=2048, gt=0, le=8192)
