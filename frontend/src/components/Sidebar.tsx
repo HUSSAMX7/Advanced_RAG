@@ -1,8 +1,10 @@
-import { BookOpen, ChevronLeft, Loader2, MessageSquare, Plus, RefreshCw, X, PanelRightClose, Settings2 } from 'lucide-react'
+import { BookOpen, ChevronLeft, Loader2, MessageSquare, Plus, RefreshCw, X, PanelRightClose, Settings2, LayoutGrid } from 'lucide-react'
 import type { SessionSummary } from '../api'
 import Brand from './Brand'
 
 interface Props {
+  assistantName: string
+  onHome: () => void
   view: 'chat' | 'library' | 'settings'
   sessions: SessionSummary[]
   activeId?: string
@@ -43,10 +45,10 @@ export default function Sidebar(props: Props) {
           <PanelRightClose className="desktop-sidebar-icon" size={18} />
         </div>
         <div className="workspace-label">
-          <span className="workspace-dot" /> مساحة العمل المحلية{' '}
-          <span className="local-badge">شخصية</span>
+          <span className="workspace-dot" /><strong dir="auto">{props.assistantName}</strong>
         </div>
         <nav className="primary-nav">
+          <button className="nav-item" onClick={props.onHome}><LayoutGrid size={19} /><span>كل المساعدين</span><ChevronLeft size={15} /></button>
           <button
             className={`nav-item ${props.view === 'library' ? 'selected' : ''}`}
             onClick={props.onLibrary}

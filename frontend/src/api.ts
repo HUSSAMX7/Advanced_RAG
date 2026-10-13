@@ -63,6 +63,17 @@ export interface Health {
   doc_available: boolean
 }
 
+export interface Assistant {
+  id: string
+  name: string
+  description: string
+  instructions: string
+  created_at: string
+  files: number
+  trained: number
+  conversations: number
+}
+
 export interface AppSettings {
   pdf_provider: 'llamaparse' | 'lightonocr'
   agent_model: string

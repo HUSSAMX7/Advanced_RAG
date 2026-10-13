@@ -12,24 +12,57 @@ import {
   Settings2,
 } from 'lucide-react'
 import {
-  api,
+  api as globalApi,
   busyStatus,
   type Health,
   type LibraryFile,
   type Session,
   type SessionSummary,
   type Turn,
+  type Assistant,
 } from './api'
 import Sidebar from './components/Sidebar'
 import Library from './components/Library'
 import Chat from './components/Chat'
 import Settings from './components/Settings'
+import Assistants from './components/Assistants'
 
 export default function App() {
+  const [route, setRoute] = useState(window.location.hash)
+  const [assistant, setAssistant] = useState<Assistant | null>(null)
+  const [error, setError] = useState('')
+  const [retry, setRetry] = useState(0)
+  const assistantId = /^#assistant\/([a-f0-9-]+)(?:\/|$)/.exec(route)?.[1] ?? null
+  useEffect(() => {
+    const changed = () => setRoute(window.location.hash)
+    window.addEventListener('hashchange', changed)
+    return () => window.removeEventListener('hashchange', changed)
+  }, [])
+  useEffect(() => {
+    let active = true
+    setAssistant(null)
+    setError('')
+    if (assistantId) void globalApi<Assistant>(`/assistants/${assistantId}`).then(
+      (result) => { if (active) setAssistant(result) },
+      (error) => { if (active) setError(error instanceof Error ? error.message : 'تعذر فتح المساعد.') },
+    )
+    return () => { active = false }
+  }, [assistantId, retry])
+  if (!assistantId) return <Assistants settings={route === '#settings'} />
+  if (error) return <div className="assistant-route-state" role="alert"><p>{error}</p><button className="button secondary" onClick={() => setRetry((value) => value + 1)}>إعادة المحاولة</button><a className="button secondary" href="#assistants">العودة للمساعدين</a></div>
+  if (assistant?.id !== assistantId) return <div className="assistant-route-state" role="status"><Loader2 className="spin" /> جارٍ فتح المساعد…</div>
+  return <Workspace key={assistant.id} assistant={assistant} />
+}
+
+function Workspace({ assistant }: { assistant: Assistant }) {
+  const routeBase = `assistant/${assistant.id}`
+  const api = useCallback(<T,>(path: string, init?: RequestInit) =>
+    globalApi<T>(`/assistants/${assistant.id}${path}`, init), [assistant.id])
   const [view, setView] = useState<'chat' | 'library' | 'settings'>('chat')
   const [files, setFiles] = useState<LibraryFile[]>([])
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [session, setSession] = useState<Session | null>(null)
+  const [newChatVersion, setNewChatVersion] = useState(0)
   const [health, setHealth] = useState<Health | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sending, setSending] = useState(false)
@@ -57,7 +90,7 @@ export default function App() {
         const [newFiles, newSessions, newHealth] = await Promise.all([
           api<LibraryFile[]>('/files'),
           api<SessionSummary[]>('/sessions'),
-          api<Health>('/health'),
+          globalApi<Health>('/health'),
         ])
         setFiles(newFiles)
         const summaries = newSessions.map((item) => {
@@ -82,7 +115,7 @@ export default function App() {
         if (!silent) notify('تعذر الاتصال بالخادم. تأكد من تشغيل التطبيق ثم أعد المحاولة.', true)
       }
     },
-    [notify],
+    [notify, api],
   )
 
   useEffect(() => {
@@ -105,18 +138,21 @@ export default function App() {
   }, [files, sessions, sending, pending, refresh])
   useEffect(() => {
     async function route() {
+      const prefix = `#${routeBase}`
+      if (!window.location.hash.startsWith(`${prefix}/`)) return
+      const location = window.location.hash.slice(prefix.length)
       const ticket = ++routeTicket.current
       setSidebarOpen(false)
-      if (window.location.hash === '#library') {
+      if (location === '/library') {
         setView('library')
         return
       }
-      if (window.location.hash === '#settings') {
+      if (location === '/settings') {
         setView('settings')
         return
       }
       setView('chat')
-      const id = window.location.hash.startsWith('#chat/') ? window.location.hash.slice(6) : null
+      const id = location.startsWith('/chat/') ? location.slice(6) : null
       requestedSession.current = id
       if (!id) {
         setSession(null)
@@ -148,32 +184,27 @@ export default function App() {
     void route()
     window.addEventListener('hashchange', route)
     return () => window.removeEventListener('hashchange', route)
-  }, [notify])
+  }, [notify, api, routeBase])
 
   function library() {
-    window.location.hash = 'library'
+    window.location.hash = `${routeBase}/library`
     setSidebarOpen(false)
   }
   function chat(id?: string) {
-    window.location.hash = id ? `chat/${id}` : 'chat'
+    window.location.hash = id ? `${routeBase}/chat/${id}` : `${routeBase}/chat`
     setSidebarOpen(false)
   }
-  async function newChat() {
+  function newChat() {
     if (sendLock.current) return
-    sendLock.current = true
-    setSending(true)
-    try {
-      const created = await api<Session>('/sessions', { method: 'POST' })
-      currentSession.current = created
-      setSession(created)
-      chat(created.session_id)
-      await refresh(true)
-    } catch (error) {
-      notify(error instanceof Error ? error.message : 'تعذر إنشاء المحادثة.', true)
-    } finally {
-      sendLock.current = false
-      setSending(false)
-    }
+    // Opening a draft never persists a session; send() creates it on first message.
+    ++routeTicket.current
+    currentSession.current = null
+    requestedSession.current = null
+    setSession(null)
+    setLoadingChat(false)
+    setView('chat')
+    setNewChatVersion((version) => version + 1)
+    chat()
   }
 
   async function retryTitle(id: string) {
@@ -331,6 +362,8 @@ export default function App() {
   return (
     <div className="app-shell">
       <Sidebar
+        assistantName={assistant.name}
+        onHome={() => { window.location.hash = 'assistants' }}
         view={view}
         sessions={sessions}
         activeId={session?.session_id}
@@ -340,8 +373,8 @@ export default function App() {
         connected={!!health}
         onClose={() => setSidebarOpen(false)}
         onLibrary={library}
-        onSettings={() => { window.location.hash = 'settings'; setSidebarOpen(false) }}
-        onNew={() => void newChat()}
+        onSettings={() => { window.location.hash = `${routeBase}/settings`; setSidebarOpen(false) }}
+        onNew={newChat}
         onChat={chat}
         onRetryTitle={(id) => void retryTitle(id)}
       />
@@ -355,7 +388,7 @@ export default function App() {
             >
               <Menu size={21} />
             </button>
-            <span>مساحة العمل</span>
+            <span dir="auto" className="breadcrumb-assistant">{assistant.name}</span>
             <ChevronLeft size={13} />
             <strong>
               {view === 'settings' ? <><Settings2 size={16} /> الإعدادات</> : view === 'library' ? (
@@ -397,6 +430,7 @@ export default function App() {
           <Settings busy={sending || files.some((file) => busyStatus(file.status))} onSaved={() => notify('تم حفظ الإعدادات. ستُستخدم في العمليات القادمة.')} />
         ) : view === 'library' ? (
           <Library
+            assistantId={assistant.id}
             files={files}
             health={health}
             uploading={uploading}
@@ -407,6 +441,8 @@ export default function App() {
           />
         ) : (
           <Chat
+            key={newChatVersion}
+            assistant={assistant}
             session={session}
             sending={sending}
             pending={(session?.session_id ?? null) === pendingSession ? pending : null}

@@ -18,6 +18,7 @@ import {
 import { busyStatus, formatSize, type Health, type LibraryFile } from '../api'
 
 interface Props {
+  assistantId: string
   files: LibraryFile[]
   health: Health | null
   uploading: string | null
@@ -288,7 +289,7 @@ export default function Library(props: Props) {
                   )}
                   {file.has_original && (
                     <a
-                      href={`/api/files/${file.id}/download`}
+                      href={`/api/assistants/${props.assistantId}/files/${file.id}/download`}
                       className="icon-button file-download"
                       aria-label={`تنزيل ${file.name}`}
                       title="تنزيل الملف"

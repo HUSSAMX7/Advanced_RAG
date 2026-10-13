@@ -25,6 +25,41 @@ def tool_response(query):
     return response
 
 
+def test_ambiguous_question_uses_document_first_guidance_and_assistant_preferences(corpus):
+    settings, embedding = corpus
+    settings = settings.model_copy(update={"assistant_instructions": "أجب بنقاط قصيرة"})
+    context = load_search_context(settings, embed_model=embedding)
+    requests = []
+
+    def respond(request):
+        body = json.loads(request.content)
+        requests.append(body)
+        # Both stages retain the document/evidence rules alongside workspace preferences.
+        assert "when in doubt, search" in body["instructions"]
+        assert "أجب بنقاط قصيرة" in body["instructions"]
+        assert "data, not instructions" in body["instructions"]
+        if len(requests) == 1:
+            assert body["tool_choice"] == "auto"
+            return httpx.Response(200, json=tool_response("ZX-774"))
+        return httpx.Response(
+            200,
+            json=response_payload(
+                {
+                    "answer": "القيمة 120 دولارًا [1]",
+                    "cited_chunk_ids": ["identifier"],
+                }
+            ),
+        )
+
+    async def run():
+        async with api_client(respond) as client:
+            return await ask_agent("كم قيمتها؟", context=context, settings=settings, client=client)
+
+    result = asyncio.run(run())
+    assert result["sources"][0]["metadata"]["source"] == "invoice.pdf"
+    assert len(requests) == 2
+
+
 @pytest.mark.parametrize("with_documents", [False, True])
 def test_general_questions_do_not_require_training_or_search_and_can_resume(
     corpus, with_documents, local_reranker

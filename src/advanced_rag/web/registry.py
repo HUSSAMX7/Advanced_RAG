@@ -2,7 +2,8 @@
 
 import re
 import sqlite3
-from collections.abc import Mapping
+from collections.abc import Generator, Mapping
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, TypedDict, Unpack, cast, get_args
@@ -96,10 +97,17 @@ class Registry:
                     "ALTER TABLE files ADD COLUMN image_support INTEGER NOT NULL DEFAULT 0"
                 )
 
-    def connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def connect(self) -> Generator[sqlite3.Connection]:
         connection = sqlite3.connect(self.path)
         connection.row_factory = sqlite3.Row
-        return connection
+        try:
+            with connection:
+                yield connection
+        finally:
+            # SQLite's own context manager commits but does not close the handle.
+            # Release it deterministically so Windows can delete a workspace.
+            connection.close()
 
     def add(
         self,

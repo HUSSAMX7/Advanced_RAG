@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     faiss_persist_dir: Path = Path("storage/pdf_documents")
     embedding_model: str = "text-embedding-3-small"
     agent_model: str = "gpt-6-luna"
+    assistant_instructions: str = ""
     title_model: str = "gpt-6-luna"
     rerank_model: str = "BAAI/bge-reranker-v2-m3"
     rerank_batch_size: int = Field(default=1, gt=0)

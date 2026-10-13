@@ -1,12 +1,17 @@
 # Domain vocabulary
 
-- **Library**: the single local collection of uploaded and indexed documents.
+- **Assistant (مساعد)**: a named knowledge assistant with its own document
+  library and conversations, optionally described by a description and response
+  instructions. Its card opens its workspace.
+- **Library (مكتبة المساعد)**: the collection of uploaded and indexed documents
+  belonging to one assistant.
 - **Training**: extracting text, splitting it into chunks, creating embeddings,
   and indexing them so chat can search them. It does not change model weights.
 - **Cancel training**: stop an unfinished training operation, retaining the file.
 - **Remove indexing**: exclude a trained document from search, retaining the file.
 - **Delete file**: remove the file and all its indexed chunks from the library.
-- **Conversation**: a saved sequence of questions, answers and source references.
+- **Conversation**: a saved sequence of questions, answers and source references
+  belonging to one assistant.
 - **Conversation history (session memory)**: the earlier saved questions, answers
   and source references belonging to the same conversation. It provides context
   for follow-up questions; earlier answers are not original document evidence.

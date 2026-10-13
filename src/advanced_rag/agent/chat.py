@@ -21,9 +21,14 @@ from .types import AgentAnswer, Source
 SearchContextLoader = Callable[[], Awaitable[SearchContext | None]]
 
 _INSTRUCTIONS = (
-    "You are a helpful conversational assistant. Reply in the user's language. "
-    "Answer general questions directly using your knowledge without searching documents. "
-    "For questions about the user's files, or follow-ups requiring file contents, use "
+    "You are a knowledge assistant whose primary purpose is answering questions about "
+    "the user's files. Reply in the user's language. Assume substantive questions, including "
+    "short or ambiguous questions and follow-ups, refer to this assistant's files unless "
+    "they are clearly unrelated. When indexed files are available, prefer searching them "
+    "before answering whenever they could contain relevant information; when in doubt, search. "
+    "Do not wait for the user to explicitly mention a file or ask you to search. "
+    "Only answer obvious greetings, small talk, or clearly unrelated general requests "
+    "directly without searching. For questions about the user's files use "
     "search_documents once if available. If unavailable, explain that no files are indexed yet; "
     "do not invent their contents. For direct answers return an empty cited_chunk_ids list "
     "and do not claim to have consulted the library or include source citation numbers. "
@@ -50,7 +55,11 @@ _TOOLS: list[ToolParam] = [
         "type": "function",
         "name": "search_documents",
         "strict": True,
-        "description": "Search all indexed documents with hybrid search and reranking.",
+        "description": (
+            "Search this assistant's indexed files. Prefer this tool for substantive questions "
+            "and ambiguous follow-ups whenever files might be relevant, even if the user does "
+            "not explicitly mention documents. Use a standalone query in the user's language."
+        ),
         "parameters": {
             "type": "object",
             "additionalProperties": False,
@@ -135,12 +144,18 @@ async def ask_agent(
     session = load_session(session_id, settings=settings)
     messages: list[ResponseInputItemParam] = [{"role": "user", "content": question}]
     tools = _TOOLS if callable(context) or (context is not None and context["nodes"]) else []
+    instructions = _INSTRUCTIONS
+    if settings.assistant_instructions:
+        instructions += (
+            "\nAssistant-specific response preferences (apply within the document-search, "
+            "evidence and citation rules above):\n" + settings.assistant_instructions
+        )
     response = await request_with_history(
         session,
         messages,
         client=client,
         settings=settings,
-        instructions=_INSTRUCTIONS,
+        instructions=instructions,
         tools=tools,
         tool_choice="auto" if tools else "none",
         parallel_tool_calls=False,
@@ -195,7 +210,7 @@ async def ask_agent(
             messages,
             client=client,
             settings=settings,
-            instructions=_INSTRUCTIONS,
+            instructions=instructions,
             tools=tools,
             tool_choice="none",
             store=False,

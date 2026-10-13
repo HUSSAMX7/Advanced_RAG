@@ -13,10 +13,11 @@ import {
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { api, type Session, type Source, type SourceDetail } from '../api'
+import { api, type Assistant, type Session, type Source, type SourceDetail } from '../api'
 import Brand from './Brand'
 
 interface Props {
+  assistant: Assistant
   session: Session | null
   sending: boolean
   pending: string | null
@@ -27,7 +28,7 @@ interface Props {
   onSend: (question: string) => Promise<{ success: boolean; restoreDraft: boolean }>
 }
 
-function Sources({ sources }: { sources: Source[] }) {
+function Sources({ sources, assistantId }: { sources: Source[]; assistantId: string }) {
   const [selected, setSelected] = useState<Source | null>(null)
   const [detail, setDetail] = useState<SourceDetail | null>(null)
   const [error, setError] = useState('')
@@ -43,7 +44,7 @@ function Sources({ sources }: { sources: Source[] }) {
     setFailedImages([])
     dialog.current?.showModal()
     try {
-      setDetail(await api<SourceDetail>(`/sources/${encodeURIComponent(source.chunk_id)}`))
+      setDetail(await api<SourceDetail>(`/assistants/${assistantId}/sources/${encodeURIComponent(source.chunk_id)}`))
     } catch {
       setError('تعذر تحميل المصدر. حاول مرة أخرى.')
     }
@@ -129,7 +130,7 @@ function Sources({ sources }: { sources: Source[] }) {
               </div>
             )}
             {detail.has_original && (
-              <a className="button secondary" href={`/api/files/${detail.file_id}/download`}>
+              <a className="button secondary" href={`/api/assistants/${assistantId}/files/${detail.file_id}/download`}>
                 <Download size={17} /> تنزيل الملف الأصلي
               </a>
             )}
@@ -206,35 +207,33 @@ export default function Chat(props: Props) {
             <div className="welcome-brand">
               <Brand large />
             </div>
-            <div className="welcome-kicker">مساحة هادئة للأفكار الواضحة</div>
+            <div className="welcome-kicker">مكتبة مستقلة، معرفة أقرب</div>
             <h1>
-              معرفتك، أقرب مما تتخيل<span>.</span>
+              <span className="welcome-assistant-name" dir="auto">{props.assistant.name}</span><span>.</span>
             </h1>
             <p>
-              اسأل، اكتشف التفاصيل، واربط الأفكار.
+              {props.assistant.description || 'اسأل مساعدك عن الملفات، واكتشف التفاصيل مع مصادرها.'}
               <br />
-              تحدث مع مدار مباشرة، وأضف ملفاتك متى احتجت إليها.
+              ملفات هذا المساعد ومحادثاته في مساحة خاصة به.
             </p>
             <div className="welcome-ready">
               <span className="status-dot" />
               {props.trained
                 ? `${props.trained} ${props.trained === 1 ? 'ملف جاهز' : 'ملفات جاهزة'} للمحادثة`
-                : 'جاهز للمحادثة، دون الحاجة إلى ملفات'}
+                : 'ارفع ملفاتك ودرّبها لتصبح جاهزة للبحث'}
             </div>
             <div className="suggestion-grid">
               {[
                 [
-                  'افهم فكرة',
-                  'شرح واضح لموضوع جديد',
-                  'اشرح لي كيف يعمل الذكاء الاصطناعي بطريقة بسيطة.',
+                  'لخّص الملفات',
+                  'نظرة واضحة على أهم الأفكار',
+                  'لخّص أهم الأفكار الواردة في ملفات هذا المساعد.',
                 ],
-                ['رتّب أفكارك', 'حوّل فكرة إلى خطة عملية', 'ساعدني في وضع خطة لتعلم مهارة جديدة.'],
+                ['اكتشف التفاصيل', 'استخرج المعلومات المهمة بمصادرها', 'ما أهم التفاصيل والمعلومات الواردة في الملفات؟'],
                 [
-                  props.trained ? 'اسأل مكتبتك' : 'اكتب معي',
-                  props.trained ? 'اكتشف أهم الأفكار في ملفاتك' : 'مساعدة في الصياغة والتعبير',
-                  props.trained
-                    ? 'لخّص أهم الأفكار الواردة في مستنداتي.'
-                    : 'ساعدني في كتابة رسالة شكر قصيرة وواضحة.',
+                  'قارن الأفكار',
+                  'اربط المعلومات بين المصادر',
+                  'قارن أهم الموضوعات في الملفات، ووضّح نقاط الاتفاق والاختلاف.',
                 ],
               ].map(([title, description, question], index) => (
                 <button
@@ -277,11 +276,11 @@ export default function Chat(props: Props) {
                 <div className="assistant-message">
                   <div className="assistant-label">
                     <Brand />
-                    <strong>مدار</strong>
+                    <strong dir="auto">{props.assistant.name}</strong>
                     {!!turn.sources.length && <span>من مكتبتك</span>}
                   </div>
                   <Answer text={turn.answer} />
-                  {!!turn.sources.length && <Sources sources={turn.sources} />}
+                  {!!turn.sources.length && <Sources sources={turn.sources} assistantId={props.assistant.id} />}
                 </div>
               </div>
             ))}
@@ -294,7 +293,7 @@ export default function Chat(props: Props) {
                 <div className="assistant-message">
                   <div className="assistant-label">
                     <Brand />
-                    <strong>مدار</strong>
+                    <strong dir="auto">{props.assistant.name}</strong>
                   </div>
                   <div className="thinking" role="status">
                     <span />
@@ -322,7 +321,7 @@ export default function Chat(props: Props) {
                 ? 'جارٍ تجهيز إجابتك…'
                 : !props.connected
                   ? 'الاتصال بالخادم غير متوفر'
-                  : 'اسأل عن أي موضوع أو عن ملفاتك…'
+                  : 'اسأل مساعدك عن ملفاته…'
             }
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
@@ -335,7 +334,7 @@ export default function Chat(props: Props) {
           <div className="composer-tools">
             <span className="composer-context">
               <BookOpen size={14} />
-              {props.trained ? 'المكتبة متاحة عند الحاجة' : 'محادثة عامة'}
+              {props.trained ? 'البحث في ملفات هذا المساعد' : 'لا توجد ملفات مدرّبة بعد'}
             </span>
             <button
               className="send-button"
@@ -348,7 +347,7 @@ export default function Chat(props: Props) {
           </div>
         </div>
         <p className="composer-note">
-          تحدث مع مدار مباشرة؛ يستخدم ملفاتك عند الحاجة. راجع الإجابات والمصادر للتأكد.
+          يبحث مساعدك في ملفاته للإجابة عن أسئلتك. راجع الإجابات والمصادر للتأكد.
         </p>
       </div>
     </div>
