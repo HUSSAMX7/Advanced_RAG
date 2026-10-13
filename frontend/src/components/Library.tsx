@@ -16,6 +16,7 @@ import {
   Ban,
 } from 'lucide-react'
 import { busyStatus, formatSize, type Health, type LibraryFile } from '../api'
+import { downloadFile } from '../auth-client'
 
 interface Props {
   assistantId: string
@@ -46,6 +47,7 @@ const stages: Record<string, string> = {
 }
 
 export default function Library(props: Props) {
+  const [downloadError, setDownloadError] = useState('')
   const input = useRef<HTMLInputElement>(null)
   const dialog = useRef<HTMLDialogElement>(null)
   const [deleting, setDeleting] = useState<LibraryFile | null>(null)
@@ -68,6 +70,7 @@ export default function Library(props: Props) {
 
   return (
     <div className="library-page">
+      {downloadError && <p className="settings-error" role="alert">{downloadError}</p>}
       <div className="page-heading">
         <div>
           <div className="eyebrow">مصادرك، في مكان واحد</div>
@@ -293,6 +296,9 @@ export default function Library(props: Props) {
                       className="icon-button file-download"
                       aria-label={`تنزيل ${file.name}`}
                       title="تنزيل الملف"
+                      onClick={(event) => { event.preventDefault(); setDownloadError('');
+                        void downloadFile(event.currentTarget.href, file.name)
+                          .catch((reason) => setDownloadError(reason.message)) }}
                     >
                       <Download size={16} />
                     </a>

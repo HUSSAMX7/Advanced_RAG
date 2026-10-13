@@ -1,3 +1,5 @@
+import { authFetch } from './auth-client'
+
 export type FileStatus =
   'untrained' | 'queued' | 'training' | 'cancelling' | 'trained' | 'failed' | 'cancelled'
 export interface LibraryFile {
@@ -87,7 +89,7 @@ export interface AppSettings {
 }
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`/api${path}`, {
+  const response = await authFetch(`/api${path}`, {
     ...init,
     headers: {
       ...(typeof init?.body === 'string' ? { 'Content-Type': 'application/json' } : {}),

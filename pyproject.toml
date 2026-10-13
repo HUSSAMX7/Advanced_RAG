@@ -30,6 +30,7 @@ dependencies = [
     "uvicorn>=0.34,<1",
     "python-multipart>=0.0.20",
     "filelock>=3.20,<4",
+    "cryptography>=44",
     "openai>=2.54.0,<3",
     "rank-bm25>=0.2.2,<0.3",
     "sentence-transformers>=5.1,<6",

@@ -39,9 +39,19 @@ class Settings(BaseSettings):
     web_data_dir: Path = Path("storage/library")
     max_upload_bytes: int = Field(default=50 * 1024 * 1024, gt=0)
     libreoffice_path: str | None = None
+    web_identity_enabled: bool = True
+    supabase_url: str | None = None
+    supabase_publishable_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("SUPABASE_PUBLISHABLE_KEY", "SUPABASE_ANON_KEY"),
+    )
+    web_credential_encryption_key: SecretStr | None = None
+    guest_session_seconds: int = Field(default=900, gt=0)
+    guest_renewal_grace_seconds: int = Field(default=60, gt=0)
+    guest_close_grace_seconds: int = Field(default=15, gt=0)
 
 
 def require_openai_key(settings: Settings) -> str:
     if not settings.openai_api_key or not settings.openai_api_key.get_secret_value():
-        raise ValueError("OPENAI_API_KEY is required for this operation")
+        raise ValueError("أضف مفتاح OpenAI من إعداداتك لاستخدام هذه الخدمة.")
     return settings.openai_api_key.get_secret_value()

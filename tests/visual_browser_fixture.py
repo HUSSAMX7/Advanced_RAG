@@ -16,23 +16,25 @@ from advanced_rag.agent.sessions import load_session, save_session
 from advanced_rag.storage import store_in_faiss
 from advanced_rag.visuals import evidence_metadata
 from advanced_rag.web.app import create_app
-from advanced_rag.web.registry import Registry
+from advanced_rag.web.files import repository
 
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory(prefix="rag-visual-qa-") as directory:
         root = Path(directory)
         settings = Settings(
             _env_file=None,
+            web_identity_enabled=False,
             web_data_dir=root / "library",
             faiss_persist_dir=root / "index",
             chat_sessions_dir=root / "sessions",
         )
         embedding = MockEmbedding(embed_dim=2)
         resource = pdf_resource()
-        registry = Registry(settings.web_data_dir)
+        registry = repository.initialize(settings.web_data_dir)
         original = f"{resource['resource_id']}.pdf"
-        (registry.uploads / original).write_bytes(resource["data"])
-        registry.add(
+        (repository.uploads(registry) / original).write_bytes(resource["data"])
+        repository.add(
+            registry,
             resource["file_name"],
             len(resource["data"]),
             file_id=resource["resource_id"],

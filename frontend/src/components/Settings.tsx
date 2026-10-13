@@ -12,7 +12,7 @@ const models = [
   ['title_model', 'مودل عناوين المحادثات', 'يولّد عنوانًا قصيرًا من أول رسالة ترسلها في المحادثة.'],
   ['embedding_model', 'مودل embeddings', 'يحوّل مقاطع ملفاتك إلى متجهات للبحث.'],
   ['rerank_model', 'مودل ترتيب النتائج', 'BGE يعمل محليًا لترتيب المقاطع الأكثر صلة بالسؤال.'],
-  ['lightonocr_model', 'مودل LightOnOCR', 'يقرأ صفحات PDF على جهازك عند اختيار الاستخراج المحلي.'],
+  ['lightonocr_model', 'مودل LightOnOCR', 'يقرأ صفحات PDF على خادم التطبيق عند اختيار الاستخراج المحلي.'],
 ] as const
 
 export default function Settings({ busy, onSaved }: Props) {
@@ -80,7 +80,7 @@ export default function Settings({ busy, onSaved }: Props) {
               <div className="settings-section-title"><span><Cpu size={20} /></span><div><h2>استخراج ملفات PDF</h2><p>المزوّد المختار يُستخدم عند ضغط «تدريب» في المكتبة.</p></div></div>
               <div className="provider-options">
                 {([
-                  ['lightonocr', 'LightOnOCR محلي', 'قراءة الملف على جهازك، بدون مفتاح OCR.', Cpu],
+                  ['lightonocr', 'LightOnOCR محلي', 'قراءة الملف على خادم التطبيق، بدون مفتاح OCR.', Cpu],
                   ['llamaparse', 'LlamaParse API', 'قراءة الملف عبر خدمة LlamaParse باستخدام مفتاحك.', Cloud],
                 ] as const).map(([value, title, description, Icon]) => (
                   <label className={`provider-card ${draft.pdf_provider === value ? 'chosen' : ''}`} key={value}>
@@ -106,7 +106,7 @@ export default function Settings({ busy, onSaved }: Props) {
                   </div>
                 </div>
               ))}
-              <p className="settings-hint"><ShieldCheck size={16} /><span>المفاتيح تُحفظ محليًا بحماية حساب ويندوز، ولا تُعرض بعد حفظها.</span></p>
+              <p className="settings-hint"><ShieldCheck size={16} /><span>مفاتيحك تُحفظ مشفّرة ولا تُعرض بعد حفظها. مفاتيح الضيف تُحذف مع جلسته.</span></p>
             </section>
             <section className="settings-section">
               <div className="settings-section-title"><span><Settings2 size={20} /></span><div><h2>الموديلات</h2><p>التغييرات تُطبّق بعد الحفظ على العمليات الجديدة.</p></div></div>

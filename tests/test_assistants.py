@@ -14,6 +14,7 @@ from advanced_rag.agent.sessions import load_session, save_session
 from advanced_rag.storage import read_index_nodes
 from advanced_rag.visuals import image_path
 from advanced_rag.web.app import create_app
+from advanced_rag.web.assistants import services as assistants
 
 
 def create(client, name="الموارد البشرية", **fields):
@@ -172,7 +173,7 @@ def test_delete_cancels_training_and_recovers_interrupted_deletion(tmp_path):
         pending, pending_base = create(client)
         client.post(pending_base + "/sessions")
         # Persisted deletion intent survives a process ending before directory removal.
-        app.state.assistants.begin_delete(pending["id"])
+        assistants.begin_delete(app.state.assistants, pending["id"])
     with TestClient(create_app(settings)) as client:
         assert client.get("/api/assistants").json() == []
         assert not (settings.web_data_dir / "assistants" / pending["id"]).exists()
@@ -248,7 +249,7 @@ def test_source_images_use_scoped_urls_and_remain_private_after_other_assistant_
         _, b_base = create(client, "المالية")
         train(client, a_base, "File A")
         b_file = train(client, b_base, "File B")
-        nodes, _ = read_index_nodes(app.state.assistants.library(a["id"]).settings)
+        nodes, _ = read_index_nodes(assistants.get_library(app.state.assistants, a["id"]).settings)
         chunk_id = nodes[0].node_id
         source = client.get(f"{a_base}/sources/{chunk_id}").json()
         url = source["images"][0]["url"]

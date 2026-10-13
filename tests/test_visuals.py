@@ -23,7 +23,8 @@ from advanced_rag.retrieval import load_search_context, search_documents
 from advanced_rag.storage import read_index_nodes, store_in_faiss
 from advanced_rag.visuals import enrich_pdf_chunks, evidence_text, image_path, prune_images
 from advanced_rag.web.app import create_app
-from advanced_rag.web.registry import Registry
+from advanced_rag.web.files import repository
+from advanced_rag.web.files.schemas import public
 
 CAPTION = "Figure 1: Engine assembly"
 DESCRIPTION = "RotorQ scarlet machinery رسم المحرك الأحمر"
@@ -255,9 +256,9 @@ def test_database_upgrade_keeps_existing_files_without_visual_opt_in(tmp_path):
                            NULL, NULL, NULL, NULL, 0, '', '')""",
             (file_id,),
         )
-    registry = Registry(settings.web_data_dir)
-    assert registry.get(file_id)["image_support"] == 0
-    assert registry.public(registry.get(file_id))["name"] == "old.pdf"
+    registry = repository.initialize(settings.web_data_dir)
+    assert repository.get(registry, file_id)["image_support"] == 0
+    assert public(repository.get(registry, file_id))["name"] == "old.pdf"
 
 
 def test_caption_failure_keeps_text_and_original_page_with_warning(tmp_path):
@@ -369,12 +370,12 @@ def test_agent_receives_real_image_bytes_without_search_description_and_deduplic
 
 def test_new_uploads_opt_in_while_existing_records_keep_old_processing(tmp_path):
     settings = web_settings(tmp_path)
-    registry = Registry(settings.web_data_dir)
+    registry = repository.initialize(settings.web_data_dir)
     resource = pdf_resource()
     old_id = str(uuid4())
     original = f"{old_id}.pdf"
-    (registry.uploads / original).write_bytes(resource["data"])
-    registry.add("old.pdf", len(resource["data"]), file_id=old_id, original=original)
+    (repository.uploads(registry) / original).write_bytes(resource["data"])
+    repository.add(registry, "old.pdf", len(resource["data"]), file_id=old_id, original=original)
     seen = []
 
     async def prepare(resource, settings, progress):

@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@fontsource/ibm-plex-sans-arabic": "^5.2.0",
+    "@supabase/supabase-js": "^2.117.3",
     "lucide-react": "^0.468.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

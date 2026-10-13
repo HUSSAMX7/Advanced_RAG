@@ -87,12 +87,12 @@ export default function Assistants({ settings = false }: { settings?: boolean })
         </a>
         <nav aria-label="التنقل الرئيسي">
           {settings ? <a className="button secondary" href="#assistants"><Bot size={17} /> المساعدون</a>
-            : <a className="button secondary" href="#settings"><Settings2 size={17} /> الإعدادات العامة</a>}
-          <span className="local-badge">مساحتك المحلية</span>
+            : <a className="button secondary" href="#settings"><Settings2 size={17} /> إعداداتي</a>}
+          <span className="local-badge">مساحتك الخاصة</span>
         </nav>
       </header>
       {settings ? <>
-        {saved && <p className="assistant-saved" role="status">تم حفظ الإعدادات لجميع المساعدين.</p>}
+        {saved && <p className="assistant-saved" role="status">تم حفظ إعداداتك لمساعديك.</p>}
         <Settings busy={false} onSaved={() => setSaved(true)} />
       </> : <main className="assistants-page">
         <div className="assistants-heading">

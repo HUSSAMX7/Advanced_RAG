@@ -63,7 +63,9 @@ def test_web_generates_title_once_and_preserves_it_after_restart(tmp_path, monke
             200, json=response_payload({"answer": "إجابة المحادثة", "cited_chunk_ids": []})
         )
 
-    monkeypatch.setattr("advanced_rag.web.app.AsyncOpenAI", lambda **kwargs: api_client(respond))
+    monkeypatch.setattr(
+        "advanced_rag.web.conversations.services.AsyncOpenAI", lambda **kwargs: api_client(respond)
+    )
     with TestClient(create_app(settings)) as client:
         session = client.post("/api/sessions").json()
         assert session["title"] == "محادثة جديدة"
@@ -138,7 +140,9 @@ def test_failed_answer_does_not_cancel_independent_title(tmp_path, monkeypatch):
             return httpx.Response(200, json=response_payload({"title": "Generated title"}))
         return httpx.Response(503, json={"error": {"message": "Unavailable"}})
 
-    monkeypatch.setattr("advanced_rag.web.app.AsyncOpenAI", lambda **kwargs: api_client(respond))
+    monkeypatch.setattr(
+        "advanced_rag.web.conversations.services.AsyncOpenAI", lambda **kwargs: api_client(respond)
+    )
     with TestClient(create_app(settings)) as client:
         session_id = client.post("/api/sessions").json()["session_id"]
         assert (
@@ -178,7 +182,9 @@ def test_title_and_answer_are_published_independently(tmp_path, monkeypatch, slo
             ),
         )
 
-    monkeypatch.setattr("advanced_rag.web.app.AsyncOpenAI", lambda **kwargs: api_client(respond))
+    monkeypatch.setattr(
+        "advanced_rag.web.conversations.services.AsyncOpenAI", lambda **kwargs: api_client(respond)
+    )
     with TestClient(create_app(settings)) as client:
         session_id = client.post("/api/sessions").json()["session_id"]
         responses = []
@@ -233,7 +239,7 @@ def test_pending_title_is_resumed_after_process_restart(tmp_path, monkeypatch):
         questions.append(question)
         return "Recovered title"
 
-    monkeypatch.setattr("advanced_rag.web.app.generate_title", title)
+    monkeypatch.setattr("advanced_rag.web.conversations.services.generate_title", title)
 
     async def answer(*args, **kwargs):
         raise AssertionError("Title recovery must not generate a chat answer")
@@ -283,7 +289,9 @@ def test_retry_title_uses_first_message_without_resending_answer(tmp_path, monke
             200, json=response_payload({"answer": "Saved answer", "cited_chunk_ids": []})
         )
 
-    monkeypatch.setattr("advanced_rag.web.app.AsyncOpenAI", lambda **kwargs: api_client(respond))
+    monkeypatch.setattr(
+        "advanced_rag.web.conversations.services.AsyncOpenAI", lambda **kwargs: api_client(respond)
+    )
     with TestClient(create_app(settings)) as client:
         session_id = client.post("/api/sessions").json()["session_id"]
         assert (

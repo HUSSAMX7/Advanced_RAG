@@ -15,6 +15,8 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { api, type Assistant, type Session, type Source, type SourceDetail } from '../api'
 import Brand from './Brand'
+import ProtectedImage from './ProtectedImage'
+import { downloadFile } from '../auth-client'
 
 interface Props {
   assistant: Assistant
@@ -111,9 +113,9 @@ function Sources({ sources, assistantId }: { sources: Source[]; assistantId: str
                         aria-label={enlarged === image.id ? 'تصغير صورة المصدر' : 'تكبير صورة المصدر'}
                         aria-expanded={enlarged === image.id}
                       >
-                        <img
+                        <ProtectedImage
                           src={image.url}
-                          onError={() => setFailedImages((current) => [...current, image.id])}
+                          onUnavailable={() => setFailedImages((current) => [...current, image.id])}
                           alt={`${image.kind === 'page' ? 'الصفحة الأصلية' : 'صورة من المصدر'} — صفحة ${image.page_num}`}
                         />
                       </button>
@@ -130,7 +132,9 @@ function Sources({ sources, assistantId }: { sources: Source[]; assistantId: str
               </div>
             )}
             {detail.has_original && (
-              <a className="button secondary" href={`/api/assistants/${assistantId}/files/${detail.file_id}/download`}>
+              <a className="button secondary" href={`/api/assistants/${assistantId}/files/${detail.file_id}/download`}
+                onClick={(event) => { event.preventDefault(); void downloadFile(event.currentTarget.href,
+                  selected?.metadata.source ?? 'document').catch((reason) => setError(reason.message)) }}>
                 <Download size={17} /> تنزيل الملف الأصلي
               </a>
             )}

@@ -2075,3 +2075,28 @@ dialog::backdrop {
   .assistant-dialog { padding: 22px; }
   .breadcrumb-assistant { max-width: 125px; }
 }
+/* Optional identity and renewable guest workspace. */
+.identity-entry { min-height: 100dvh; display: grid; place-items: center; padding: 32px 16px; background: #f7f8fa; }
+.identity-card { width: min(100%, 460px); padding: 32px; border: 1px solid #e4e7eb; border-radius: 22px; background: #fff; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 20px 60px #1426380d; }
+.identity-card h1, .identity-card h2, .identity-card p { margin: 0; }
+.identity-card p, .identity-card small { line-height: 1.9; color: #5f6b7a; }
+.identity-card h1 { font-size: 30px; }
+.identity-form { display: flex; flex-direction: column; gap: 14px; }
+.identity-form input { min-height: 46px; padding: 10px 14px; border: 1px solid #dbe1e8; border-radius: 10px; width: 100%; background: #fff; }
+.identity-form input:focus { outline: 2px solid #60a5fa; outline-offset: 2px; }
+.identity-note { background: #fff6e7; padding: 10px 12px; border-radius: 8px; }
+.identity-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 24px; background: #fff; border-bottom: 1px solid #e4e7eb; }
+.identity-bar > span { color: #526174; font-size: 13px; overflow-wrap: anywhere; }
+.identity-bar > div { display: flex; gap: 8px; }
+.identity-content .app-shell { height: calc(100dvh - 64px); }
+.identity-content .assistants-shell, .identity-content .assistant-route-state { min-height: calc(100dvh - 64px); }
+.identity-modal { margin: auto; max-height: calc(100dvh - 48px); overflow: auto; }
+.identity-modal:not([open]) { display: none; }
+.identity-modal::backdrop { background: #15253680; }
+.identity-error { position: fixed; bottom: 24px; left: 24px; right: 24px; max-width: 600px; margin: auto; z-index: 1100; padding: 14px 20px; border: 1px solid #fecaca; border-radius: 12px; background: #fff1f2; color: #991b1b; }
+.renew-countdown { font-size: 24px; font-weight: 700; color: #b45309 !important; }
+@media (max-width: 600px) {
+  .identity-card { padding: 24px; }
+  .identity-bar { padding: 10px 12px; flex-wrap: wrap; }
+  .identity-bar .button { padding: 7px 10px; font-size: 12px; }
+}

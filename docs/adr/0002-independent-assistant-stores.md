@@ -1,5 +1,8 @@
 # Independent stores for assistants
 
+The application-wide credentials and model choices below are superseded by
+[ADR-0003](0003-owner-specific-service-settings.md) for the production design.
+
 Each assistant owns separate document, image, FAISS and conversation directories,
 while credentials and model choices remain application-wide. FAISS retrieval does
 not support metadata filtering, so independent stores make the ownership boundary

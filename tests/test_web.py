@@ -17,6 +17,7 @@ from advanced_rag.web.app import create_app
 def web_settings(tmp_path):
     return Settings(
         _env_file=None,
+        web_identity_enabled=False,
         web_data_dir=tmp_path / "library",
         faiss_persist_dir=tmp_path / "index",
         chat_sessions_dir=tmp_path / "sessions",
@@ -230,7 +231,9 @@ def test_context_capacity_error_is_actionable_in_web_and_preserves_history(tmp_p
             json={"error": {"message": "Input exceeds context", "code": "context_length_exceeded"}},
         )
 
-    monkeypatch.setattr("advanced_rag.web.app.AsyncOpenAI", lambda **kwargs: api_client(respond))
+    monkeypatch.setattr(
+        "advanced_rag.web.conversations.services.AsyncOpenAI", lambda **kwargs: api_client(respond)
+    )
     with TestClient(create_app(settings)) as client:
         response = client.post(
             f"/api/sessions/{session['session_id']}/messages", json={"question": "Follow up"}
