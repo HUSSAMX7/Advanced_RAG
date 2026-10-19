@@ -3,7 +3,7 @@ import { Loader2, LogIn, LogOut, Mail, Clock3, RefreshCw } from 'lucide-react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   AUTH_EXPIRED_EVENT, GUEST_TOKEN_KEY, authJson, endGuest, initializeAuth,
-  setCredentials, type AuthConfig, type GuestIdentity, type Identity,
+  setCredentials, emailSignInError, type AuthConfig, type GuestIdentity, type Identity,
 } from '../auth-client'
 
 export default function IdentityGate({ children }: { children: ReactNode }) {
@@ -219,8 +219,8 @@ export default function IdentityGate({ children }: { children: ReactNode }) {
       })
       if (error) throw error
       setSent(true)
-    } catch {
-      setError('تعذر إرسال رسالة التحقق. تأكد من الإيميل وحاول مرة أخرى.')
+    } catch (error) {
+      setError(emailSignInError(error))
     } finally { setBusy(false) }
   }
 
@@ -243,6 +243,7 @@ export default function IdentityGate({ children }: { children: ReactNode }) {
     <label htmlFor="login-email">الإيميل</label>
     <input id="login-email" type="email" dir="ltr" required maxLength={254} autoComplete="email" value={email} disabled={busy} onChange={(event) => { setEmail(event.target.value); setSent(false) }} />
     {sent && <p role="status">أرسلنا رسالة التحقق. افتح إيميلك واضغط رابط الدخول.</p>}
+    {error && <p className="identity-note" role="alert">{error}</p>}
     {!config?.configured && <p role="status">تسجيل الدخول غير متاح حاليًا. يمكنك المتابعة كضيف.</p>}
     <button className="button primary" disabled={busy || !config?.configured || sent}>{busy ? <Loader2 className="spin" size={17} /> : <Mail size={17} />} إرسال رسالة التحقق</button>
   </form>
@@ -261,7 +262,7 @@ export default function IdentityGate({ children }: { children: ReactNode }) {
       <button className="button secondary" disabled={busy || !config} onClick={() => void startGuest()}>المتابعة كضيف</button>
       <small>للضيف كامل الوظائف. تنتهي بياناته عند إنهاء الجلسة أو إغلاق الصفحة، ويحتاج تجديدًا كل ١٥ دقيقة.</small>
     </div></main>}
-    {error && <div className="identity-error" role="alert">{error}</div>}
+    {error && identity && !login && <div className="identity-error" role="alert">{error}</div>}
     {login && identity && !renewal && <dialog ref={loginDialog} className="identity-card identity-modal" aria-label="تسجيل الدخول" onCancel={() => setLogin(false)}>
       {loginForm}<button className="button secondary" onClick={() => setLogin(false)}>العودة لجلسة الضيف</button>
     </dialog>}

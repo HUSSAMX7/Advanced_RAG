@@ -1,8 +1,85 @@
 # Production readiness design interview
 
-Status: first feature implemented and verified locally; live sign-in setup and
-user review pending. Later production architecture branches remain open.
+Status: first feature implemented and verified locally; backend restructuring
+reviewed and committed. Supabase is connected locally and has accepted a real
+email-link request; receipt and completed sign-in remain unverified. Later
+production architecture branches remain open.
 Started: 2026-10-13.
+
+## ملخص الاستكمال للشات الجديدة
+
+آخر تحديث: 2026-10-13. آخر كوميت: `fd1dd74` على فرع `develop`.
+
+الهدف هو تجهيز المشروع للبرودكشن: رفع ملفات كبيرة، بيانات دائمة، مهام معالجة
+في الخلفية، وقراءة وتحميل مع كثرة الطلبات. ننفّذ فيتشر واحدة ونختبرها ونعرضها
+للمراجعة، ثم ننتظر موافقة المستخدم قبل تنفيذ التالية.
+
+### المنجز
+
+- تنفيذ الدخول الاختياري عبر رابط تحقق بالإيميل، وجلسات الضيف وعزل بيانات
+  وإعدادات ومفاتيح كل حساب أو ضيف. مراجعة المتصفح استخدمت خدمة دخول وهمية؛
+  إرسال الإيميل الحقيقي لم يُختبر بعد.
+- الضيف يستخدم جميع الوظائف، ويظهر تنبيه تجديد كل 15 دقيقة مع مهلة دقيقة.
+  تحديث الصفحة يحتفظ بالجلسة. إنهاؤها أو انتهاؤها يلغي العمل وينظّف البيانات.
+  الإغلاق يستخدم إشعارًا بأفضل جهد ومهلة 15 ثانية لاستيعاب التحديث، مع انتهاء
+  احتياطي إذا لم يصل الإشعار. لا نضمن حذفًا لحظيًا عند كل إغلاق للمتصفح.
+- بيانات الضيف لا تنتقل إلى الحساب. المستخدم يوفّر مفاتيح خدماته؛ المفاتيح
+  محفوظة مشفّرة وتظهر رسالة واضحة عند غياب مفتاح مطلوب.
+- إعادة تنظيم FastAPI حسب الفيتشر: identity وassistants وfiles وconversations
+  وsettings. كل فيتشر يجمع routes.py وschemas.py وservices.py وrepository.py.
+  العمليات والتخزين فنكشنز بتبعيات واضحة؛ الكلاسات لحاجة فعلية موضّحة في
+  [دليل الهيكلة](../architecture.md).
+- نجحت الاختبارات المحلية الـ131، وفحوص Ruff والأنواع، وبناء الواجهة. هذه
+  النتائج لا تثبت الإيميل الحقيقي أو أداء البرودكشن تحت الضغط.
+- الكوميت يشمل التنفيذ والتوثيق. CONTEXT.md وAGENTS.md مستثنيان من الكوميت
+  بناءً على طلب المستخدم وباقيان محليًا؛ .env والأسرار وبيانات التشغيل خارج Git.
+
+### المتبقي بالترتيب المقترح
+
+| المرحلة | العمل المتبقي | معيار المراجعة |
+|---|---|---|
+| إكمال الفيتشر الأولى | تأكيد وصول رابط التحقق وإكمال الدخول، ثم تجهيز إرسال البريد العام | تجربة رابط تحقق حقيقي، حسابين منفصلين، والخروج والعودة؛ إرسال لعناوين خارج فريق المشروع قبل اعتماد شرط أي إيميل |
+| 2 — البيانات الدائمة | تصميم ونقل المساعدين والمحادثات ومعلومات الملفات إلى قاعدة بيانات مشتركة | عزل الملكية، استمرار البيانات بعد إعادة التشغيل، وخطة نقل البيانات الحالية |
+| 3 — الملفات | تخزين خاص للملفات، رفع كبير قابل للاستكمال، وتحميل مصرح به | انقطاع الرفع واستكماله، منع الوصول لملف مستخدم آخر، وتنظيف الرفع غير المكتمل |
+| 4 — المعالجة الخلفية | كيو دائمة وworkers مع التقدم والمحاولات والإلغاء وتنبيه الانتظار بسبب الضغط | استمرار المهمة بعد إعادة تشغيل الخادم، التعامل مع التسليم المكرر، والإلغاء الآمن |
+| 5 — القراءة المتزامنة | تحديد طريقة الفهرسة والنشر والبحث أثناء التدريب ومع تعدد الطلبات | نتائج متسقة، منع ظهور فهرس جزئي، وقياس زمن البحث تحت حمل ممثل |
+| 6 — التشغيل والسعة | اختيار الاستضافة، الحدود والمراقبة والنسخ الاحتياطي والاسترجاع | اختبار ضغط بأرقام واقعية، تنبيهات مفيدة، وتجربة استرجاع ناجحة |
+
+هذه المراحل نطاق مقترح للمراجعة؛ تفاصيل كل مرحلة واختيار الخدمات تُحسم قبل
+تنفيذها. Supabase Auth مدمج، أما Postgres وStorage وQueues وبديل FAISS فلم
+تُعتمد أو تُنفّذ بعد. لا توجد استضافة منشورة أو دومين أو SMTP مجهّز.
+الكود الحالي ما زال يستخدم SQLite وملفات محلية وFAISS ومهام داخل عملية واحدة.
+
+### نقطة البداية في الشات الجديدة
+
+1. اقرأ هذا الملف و[دليل الهيكلة](../architecture.md)، ثم افحص git status
+   وتعليمات AGENTS.md المحلية. احفظ تغييرات المستخدم الموجودة.
+2. ابدأ من [إعداد الدخول بالإيميل](../setup-email-signin.md): المستخدم أكد
+   وجود مشروع `HUSSAMX7’s Project`، والصور تعرض حالة `Healthy`.
+   القيم العامة مربوطة في `.env` الآن مع الاحتفاظ بمفتاح التشفير.
+   نجح فحص Supabase Auth وفحص إعدادات التطبيق المحلي وبناء الواجهة.
+   طلب رابط تحقق حقيقي من واجهة التطبيق قُبل وظهرت رسالة نجاح الطلب.
+   المطلوب الآن تأكيد وصول الرسالة وإكمال الدخول في المتصفح نفسه الذي طلبها،
+   والتحقق من إعداد Site URL وRedirect URLs على `http://127.0.0.1:8001/`.
+   لم يُؤكد تجهيز دومين أو SMTP أو إعداد عناوين العودة في لوحة Supabase.
+   المحاولات اللاحقة أرجعت `429` مع `over_email_send_rate_limit`؛ عائق
+   التجربة الحالي هو حد إرسال البريد. عُدلت رسالة الواجهة ونجحت اختبارات
+   الخطأ وبناء الواجهة وتجربة محلية محاكية. لا تكرر الإرسال دون سبب؛ راجع
+   قسم عائق الإرسال في دليل الإعداد قبل متابعة التجربة الحقيقية.
+3. استخدم .env.example وscripts/configure_identity.py للإعداد. مفتاح التشفير
+   جُهّز محليًا بالفعل؛ احتفظ به ولا تعرض .env أو المفاتيح الخاصة في المخرجات.
+4. أكمل التجربة الحقيقية للفيتشر الأولى أو وثّق اتفاق المستخدم الصريح على
+   تأجيل إعدادها. لا تعتبر الموافقة على تنظيم الكود إثباتًا لنجاح إرسال البريد.
+5. قبل تنفيذ المرحلة الثانية، حدد نطاقها ومعيار مراجعتها واحصل على موافقة
+   المستخدم على الانتقال. عند تسليم كل فيتشر أعطه روابط الفنكشنز بترتيب
+   مسار الطلب، الحالات المهمة، نتائج الاختبارات وطريقة التجربة اليدوية.
+
+نص جاهز لبداية الشات الجديدة:
+
+> اقرأ docs/specs/production-readiness.md وdocs/architecture.md وتعليمات
+> AGENTS.md، وافحص حالة المشروع. كمل معي من نقطة البداية الموثقة، فيتشر
+> فيتشر، ولا تبدأ التالية إلا بعد موافقتي. ابدأ بإكمال إعداد وتجربة الدخول
+> الحقيقي بالإيميل حسب الوضع الحالي.
 
 ## Objective
 
@@ -66,12 +143,24 @@ docs/adr/ as the interview resolves them.
 
 ## Reported environment and unresolved capacity
 
-The user has a Supabase account only; no project or services have been configured.
+On 2026-10-13, the user confirmed an existing Supabase project. Their screenshots
+show `HUSSAMX7’s Project` with status `Healthy`; the publishable key is truncated.
+The user then supplied the complete public project values, which were saved to
+the ignored `.env` with `scripts/configure_identity.py`, retaining the existing
+credential encryption key. Supabase `/auth/v1/settings` returned HTTP 200 with
+email enabled, signup allowed and email auto-confirm disabled. The local
+`/api/auth/config` returned HTTP 200 with identity enabled and matching project
+values. The frontend production build passed and the local server started at
+`http://127.0.0.1:8001/`. A real email-link request from the in-app browser was
+accepted and the UI displayed its success notice. Receipt, redirect behavior
+and completed sign-in are still unverified. Keep the requesting browser session
+for PKCE; do not request a second email without a reason. No Supabase dashboard
+tab is connected to this chat, so Site URL, allowed redirects and SMTP settings
+have not been inspected. Domain and SMTP provisioning have not been confirmed.
 The baseline application used local SQLite, files and FAISS without Supabase.
 Feature 1 adds Supabase Auth integration and owner-specific local workspaces.
-Supabase project provisioning is still required for a connected demonstration.
-The user has no domain or SMTP provider. Backend and frontend hosting remain
-undecided; nothing has been deployed or purchased.
+Backend and frontend hosting remain undecided; no deployment or purchase has
+been confirmed.
 
 Traffic and file-volume estimates are unknown. Establish configurable admission
 and concurrency limits, then measure representative ingestion and retrieval
@@ -81,10 +170,21 @@ and upstream model/OCR rate limits before raising concurrency.
 
 ## Current decision frontier
 
-Provision the external sign-in services, validate real email delivery, and review
-Feature 1 with the user before beginning the next implementation feature. See
+Supabase is connected locally and a real email-link request has been accepted.
+Confirm receipt, verify local redirect configuration, complete sign-in in the
+requesting browser, and validate the remaining live review cases and general
+SMTP delivery. Review Feature 1 with the user before beginning the next
+implementation feature. See
 [Feature 1](identity-and-guest-sessions.md). Capacity and hosting decisions remain
 open for their subsequent design rounds.
+
+The current live blocker is HTTP 429 with `over_email_send_rate_limit`, captured
+from the actual Supabase SDK error. Email error guidance was corrected and
+verified with four regression tests, a production frontend build and a local
+HTTP 429 replay in both entry and guest-dialog flows. Debug instrumentation was
+removed. Live quota reset timing and SMTP settings have not been inspected;
+wait for sending availability or configure production SMTP before another live
+delivery attempt. No later feature is authorized by this fix.
 
 Questions dependent on these answers wait until their prerequisites are settled.
 

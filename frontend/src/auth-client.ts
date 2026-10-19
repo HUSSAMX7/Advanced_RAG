@@ -16,6 +16,25 @@ export interface GuestIdentity {
 export interface AccountIdentity { kind: 'account'; id: string; email: string }
 export type Identity = GuestIdentity | AccountIdentity
 
+export function emailSignInError(error: unknown): string {
+  const details = typeof error === 'object' && error !== null ? error : {}
+  const code = 'code' in details ? details.code : undefined
+  const status = 'status' in details ? details.status : undefined
+  if (code === 'over_email_send_rate_limit') {
+    return 'وصلنا للحد المؤقت لإرسال رسائل التحقق. انتظر قبل طلب رسالة جديدة، أو استخدم آخر رسالة وصلتك.'
+  }
+  if (code === 'over_request_rate_limit' || status === 429) {
+    return 'طلبات التحقق كثيرة حاليًا. انتظر قليلًا قبل المحاولة مرة أخرى.'
+  }
+  if (code === 'email_address_invalid') {
+    return 'عنوان الإيميل غير مقبول. تحقق من العنوان وحاول مرة أخرى.'
+  }
+  if (code === 'email_address_not_authorized') {
+    return 'إرسال التحقق لهذا الإيميل غير متاح حاليًا. يمكنك المتابعة كضيف.'
+  }
+  return 'تعذر إرسال رسالة التحقق الآن. حاول لاحقًا أو تابع كضيف.'
+}
+
 export const GUEST_TOKEN_KEY = 'madar.guest-session'
 export const AUTH_EXPIRED_EVENT = 'madar:session-expired'
 let currentHeaders: Record<string, string> = {}

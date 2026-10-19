@@ -1,5 +1,18 @@
 # Domain vocabulary
 
+- **Guest (ضيف)**: a visitor using the application without registering or
+  signing in to an account, with access to all core assistant, document and chat
+  functions. Their application data belongs to a renewable temporary guest
+  session and does not become account data when they sign in.
+- **Guest session (جلسة الضيف)**: a temporary workspace containing one guest's
+  assistants, documents, conversations and service settings. Renewal retains
+  that workspace; ending the session discards it.
+- **Account holder (صاحب الحساب)**: a user who signs in using a verified email
+  address. Their assistants, document libraries and conversations are private
+  to their account; the product has no shared team libraries.
+- **Service settings (إعدادات الخدمات)**: an account holder's or guest session's
+  provider choices, model choices and API credentials. These settings belong to
+  that owner and are independent of other users' settings.
 - **Assistant (مساعد)**: a named knowledge assistant with its own document
   library and conversations, optionally described by a description and response
   instructions. Its card opens its workspace.

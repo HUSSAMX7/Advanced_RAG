@@ -1,6 +1,7 @@
 # Feature 1: optional sign-in and renewable guest workspaces
 
-Status: implemented locally; live Supabase/email provisioning and final review pending.
+Status: implemented locally; Supabase connected on 2026-10-13 and a real
+email-link request accepted. Email receipt, completed sign-in and final review pending.
 
 Arabic setup walkthrough: [إعداد الدخول بالإيميل](../setup-email-signin.md).
 
@@ -60,7 +61,7 @@ to any guest or account.
 
 ## Configuration for a connected demonstration
 
-1. Create a Supabase project and obtain its URL and **publishable/anon** key.
+1. Use the existing `HUSSAMX7’s Project` and obtain its URL and **publishable/anon** key.
    Never use a service-role/secret key as the publishable key.
 2. Add these values to the ignored `.env` using `.env.example`. Supply
    `WEB_CREDENTIAL_ENCRYPTION_KEY` for portable secret encryption and retain it
@@ -74,8 +75,8 @@ to any guest or account.
    for validating the product's any-email requirement.
 5. Build the frontend and start the application. Check two different accounts,
    guest-to-account switching, sign-out, reload, close/reopen, and actual email
-   delivery. Project provisioning and real email delivery remain unverified
-   until these external services are configured.
+   delivery. The user has confirmed project creation; Auth/SMTP configuration
+   and real email delivery remain unverified until inspected and exercised.
 
 ## References
 
@@ -95,4 +96,19 @@ to any guest or account.
   renewal, simulated email-link/PKCE sign-in, encrypted-settings UI persistence,
   sign-out and the absence of inherited account keys in a new guest workspace.
 - The email service in that fixture is simulated. No real email delivery or
-  external deployment has been validated.
+  external deployment was validated by that fixture.
+- Connected setup on 2026-10-13: Supabase Auth settings and local auth config
+  returned HTTP 200, and the frontend production build passed. A real email-link
+  request through the in-app browser displayed a success notice. This confirms
+  request acceptance; email receipt, redirect settings, completed sign-in,
+  two-account isolation with real accounts and general SMTP delivery remain
+  unverified. The local encryption key was retained and `.env` is ignored by Git.
+- Subsequent live email requests returned HTTP 429 with
+  `over_email_send_rate_limit`. The frontend now gives quota guidance rather
+  than blaming the email address, with errors inside the login form so they are
+  accessible within the guest login dialog. Four regression tests passed
+  (`npm --prefix frontend run test:auth`) and the frontend build passed. Local
+  browser QA replayed the same response in both entry and guest-dialog flows
+  using `tests/identity_browser_fixture.py --email-rate-limited`; this sends no
+  real email. Debug logging was removed. Real email receipt and sign-in remain
+  pending sending availability or SMTP configuration.

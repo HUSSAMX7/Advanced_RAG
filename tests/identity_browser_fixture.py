@@ -4,8 +4,10 @@ uv run python tests/identity_browser_fixture.py
 No real mail, credentials, document APIs or Supabase account are used.
 POST /qa/advance?seconds=900 advances ONLY this fixture's guest clock.
 GET /qa/verify simulates clicking the email verification link.
+Add --email-rate-limited to replay a Supabase email-quota error without real mail.
 """
 
+import argparse
 import base64
 import json
 import tempfile
@@ -16,7 +18,7 @@ from pathlib import Path
 import uvicorn
 from cryptography.fernet import Fernet
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from llama_index.core.embeddings import MockEmbedding
 from llama_index.core.schema import TextNode
 from pydantic import SecretStr
@@ -39,6 +41,9 @@ def encoded(value):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--email-rate-limited", action="store_true")
+    arguments = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="rag-identity-qa-") as temporary:
         clock = Clock()
         user = {
@@ -119,6 +124,12 @@ if __name__ == "__main__":
 
         @fixture.post("/supabase/auth/v1/otp")
         async def email(request: Request):
+            if arguments.email_rate_limited:
+                return JSONResponse(
+                    {"code": "over_email_send_rate_limit", "msg": "Email rate limit exceeded"},
+                    status_code=429,
+                    headers={"X-Supabase-Api-Version": "2024-01-01"},
+                )
             body = await request.json()
             user["email"] = body["email"]
             return {}
