@@ -14,6 +14,22 @@ The goal: demonstrate high-quality RAG retrieval and answers without manually cl
 
 **PDF · Word · TXT** | Hybrid search + reranking | PDF images & diagrams | Answers with sources
 
+## How it works
+
+```mermaid
+flowchart TD
+    A["Upload PDF / Word / TXT"] --> B["Extract content"]
+    B --> C["Detect PDF sections + split text into chunks"]
+    C --> D["Embeddings + FAISS + BM25"]
+    B --> V["Extract PDF images + describe them for search"]
+    V --> D
+    Q["Your question"] --> E["Hybrid retrieval"]
+    D --> E
+    E --> F["Merge rankings with RRF"]
+    F --> G["BGE reranking → top 5 passages"]
+    G --> H["Original text + related images → answer with sources"]
+```
+
 <details>
 <summary>More screenshots</summary>
 
