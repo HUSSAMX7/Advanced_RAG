@@ -1,172 +1,206 @@
-# دليل الاستخدام والتشغيل — Advanced RAG
+# Setup & usage guide — Advanced RAG
 
-مرجع تشغيل واجهة مدار وأدوات CLI وإعدادات الاستخراج والبحث والتخزين.
-يدعم التطبيق PDF وWord وTXT، ويستخدم FAISS للفهرسة المحلية.
-مسار معالجة PDF:
-
-```text
-PDF → LlamaParse / LightOnOCR → استخراج الأقسام ومراجعتها بالـLLM
-    → ربط الأقسام بالصفحات → SentenceSplitter (1024 / overlap 50) → FAISS
-```
-
-> نسخة التطبيق الحالية في فرع `main`. ارجع إلى [صفحة المشروع](../README.md) لعرض التجربة بالصور وخطوات البدء.
-
-## الملفات
+This guide covers the Madar web app, CLI tools, document extraction, retrieval,
+and storage. The app supports PDF, Word, and TXT, with local FAISS indexing.
 
 ```text
-src/advanced_rag/
-├── ingestion/                # إدخال PDF وتجهيز مقاطعه
-│   ├── providers/
-│   │   ├── llamaparse.py     # استخراج الصفحات عبر LlamaParse
-│   │   └── lightonocr.py     # LightOnOCR الأصلي، بما فيه postprocess
-│   ├── sections.py          # استخراج الأقسام ومراجعتها وربطها الأصلي
-│   ├── chunking.py          # create_chunks: الأقسام ثم SentenceSplitter
-│   └── pipeline.py          # الاستخراج ثم تجهيز المقاطع ثم الحفظ
-├── retrieval/                # FAISS + BM25 + RRF ثم BGE reranking محلي
-├── agent/                    # إيجنت OpenAI وشات الطرفية وحفظ الجلسات
-├── web/                      # FastAPI مقسّم حسب الفيتشر
-│   ├── app.py                # إنشاء التطبيق وربط الراوتات ودورة التشغيل
-│   ├── identity/             # الحسابات وجلسات الضيف وعزل البيانات
-│   ├── assistants/           # المساعدون ومكتباتهم
-│   ├── files/                # الرفع والتحميل والتدريب والمصادر
-│   ├── conversations/        # المحادثات والإجابات والعناوين
-│   └── settings/             # إعدادات المستخدم ومفاتيحه المشفّرة
-├── storage.py                # embeddings وحفظ فهرس FAISS وتحميله
-├── models.py                 # بيانات الملف وحالة المعالجة
-├── config.py                 # إعدادات الاتصال
-└── cli.py                    # تشغيل البايب لاين
+PDF → LlamaParse / LightOnOCR → LLM section extraction and review
+    → Map sections to pages → SentenceSplitter (1024 / overlap 50) → FAISS
 ```
 
-`process_pdfs` ينسق المعالجة وحالات الملفات. `create_chunks` يجمع استخراج الأقسام
-وربطها بالصفحات ثم التقسيم، دون تخزين. `storage.py` يتعامل مع الفهرس المحفوظ.
-الاختبارات مرتبة حسب نفس المهام: المزوّدات، الأقسام، التقسيم، البايب لاين، التخزين والتشغيل.
+The current application is on `main`. See the [project README](../README.md)
+for screenshots and a brief introduction.
 
-كل فيتشر في الويب يجمع `routes.py` و`schemas.py` و`services.py` و`repository.py`.
-العمليات والتخزين فنكشنز بتبعيات واضحة؛ الكلاسات تستخدم عند حاجة فعلية مثل
-نماذج التحقق وحالة الأقفال والمهام. التفاصيل في [هيكلة الباكند](https://github.com/HUSSAMX7/Advanced_RAG/blob/main/docs/architecture.md).
+## Requirements and installation
 
-## التشغيل
-
-### واجهة المكتبة والشات
-
-الواجهة عربية مبنية بـReact وTypeScript. تفتح على صفحة كروت المساعدين؛ أنشئ مساعدًا
-باسم، ووصف وتعليمات إجابة اختياريين، ثم افتح كرته للدخول إلى الشات ومكتبته.
-لكل مساعد ملفاته وفهرسه وصوره ومحادثاته الخاصة. يمكنك تعديل المساعد من كرته أو
-حذفه مع جميع بياناته بعد تأكيد واضح. الدخول اختياري برسالة تحقق للإيميل عبر
-Supabase Auth، ولكل حساب أو جلسة ضيف بياناته وإعداداته ومفاتيحه الخاصة.
-الضيف يستخدم جميع الوظائف؛ يظهر تنبيه تجديد كل 15 دقيقة مع مهلة دقيقة، وتُحذف
-بياناته عند إنهاء الجلسة أو انتهائها. تحديث الصفحة يحتفظ بها، وإغلاقها ثم فتحها
-يبدأ جلسة جديدة؛ تنظيف الخادم يعتمد على إشعار الإغلاق مع انتهاء احتياطي.
-الدخول للحساب لا ينقل شغل الضيف. التفاصيل والإعداد في
-[الفيتشر الأولى](https://github.com/HUSSAMX7/Advanced_RAG/blob/main/docs/specs/identity-and-guest-sessions.md).
-الصيغ المدعومة: PDF وDOCX وDOC وTXT (UTF-8).
-
-المساعد يفترض أن الأسئلة الموضوعية والمختصرة غالبًا تتعلق بملفاته؛ يُوجّه للبحث
-متى كان محتوى الملفات محتمل الصلة حتى دون طلب البحث صراحة. تبقى الأسئلة العامة
-الواضحة والتحيات متاحة دون ملفات، ولا يدّعي الاطلاع على مصدر دون البحث فيه.
-هذا تفضيل في توجيه المودل؛ اختيار الأداة يبقى تلقائيًا وليس بحثًا إجباريًا لكل رسالة.
+Install Python 3.13+, uv, and Node.js 20.19+ or 22.12+ for the frontend build.
 
 ```powershell
+git clone https://github.com/HUSSAMX7/Advanced_RAG.git
+cd Advanced_RAG
 uv sync
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 npm --prefix frontend ci
 npm --prefix frontend run build
 uv run advanced-rag-web
 ```
 
-افتح `http://127.0.0.1:8001`. يتطلب بناء الواجهة Node.js 20.19+ أو 22.12+.
-من «الإعدادات» اختر مزوّد PDF وأدخل مفاتيح OpenAI وLlamaParse وعدّل الموديلات.
-المفاتيح محفوظة مشفّرة، ولا تُعاد للمتصفح. `WEB_CREDENTIAL_ENCRYPTION_KEY` يوفّر
-تشفيرًا قابلًا للنقل للخوادم؛ عند غيابه تُستخدم حماية ويندوز المحلية. إعدادات الويب تتقدم على
-`.env` وتُطبّق بعد الحفظ بدون إعادة تشغيل؛ يبقى `.env` مصدر الإعداد الأولي وإعداد CLI.
-لا يمكن حفظ إعدادات جديدة أثناء تدريب أو إجابة تخص المستخدم، ولا تغيير مودل embeddings
-أثناء وجود ملفات مفهرسة في أي مساعد يخصه؛ أزل فهرستها أولًا ثم غيّر المودل ودرّبها مجددًا.
-مفاتيح `.env` الخاصة بالـCLI لا تُنسخ لحسابات الويب أو الضيوف؛ كل مستخدم يدخل مفاتيحه.
+Open [http://127.0.0.1:8001](http://127.0.0.1:8001).
+For frontend development, keep the backend running and run
+`npm --prefix frontend run dev` in a second terminal. Vite proxies `/api`
+requests to the local backend.
 
-اختيار «LightOnOCR محلي» يشغّل المودل تلقائيًا عند ضغط «تدريب» لملف PDF، بدون
-خادم OCR أو URL أو مفتاح OCR. يُنزّل `lightonai/LightOnOCR-2-1B` مرة واحدة
-(نحو 2 GB) ثم يستخدم الكاش. يعمل على CPU بعملية مستقلة، صفحة واحدة في كل مرة؛
-تُنهى العملية عند الإلغاء أو اكتمال الاستخراج ويُحرر BGE من الذاكرة قبل تشغيلها.
-أي صفحة فاشلة أو نص مقطوع يفشل التدريب بدل حفظ ملف ناقص، دون تحويل تلقائي للسحابة.
-الشات وتحديد أقسام PDF والـembeddings ما زالت تستخدم OpenAI. تشغيل CPU قد يكون
-بطيئًا، ودعم العربية محدود بحسب [ورقة المطورين](https://arxiv.org/html/2601.14251v1).
-للتطوير شغّل الخادم، ثم `npm --prefix frontend run dev` في طرفية ثانية؛
-Vite يمرر طلبات `/api` إلى الخادم المحلي.
+## Web app
 
-- رفع الملف يحفظه فقط؛ اضغط **تدريب** لاستخراج النص وتقسيمه وحفظ المتجهات.
-- يظهر **تم التدريب** بعد تفعيل الفهرس المكتمل فقط. يمكنك متابعة مراحل
-  الاستخراج والتقسيم والحفظ؛ الملفات المنتظرة تُعالج بالتتابع.
-- **إيقاف** يلغي التدريب المنتظر أو الجاري. أثناء طلب embeddings بدأ بالفعل،
-  ينتظر إتمام الطلب ثم يتخلص من النتيجة دون نشرها في الفهرس.
-- **إزالة الفهرسة** تخرج مقاطع الملف من البحث وتحتفظ بالملف الأصلي؛
-  **حذف الملف** يزيل الأصل ومقاطعه. المحادثات السابقة تبقى محفوظة.
-- مصادر الإجابة تعرض اسم الملف، والصفحة إن وجدت، والمقطع المستخدم.
-  مصدر أُزيل من الفهرس يظهر كمصدر غير متوفر عند فتحه من إجابة قديمة.
-- ملفات فُهرست سابقًا عبر CLI تظهر في المكتبة، لكن تنزيل الأصل وإعادة التدريب
-  يتطلبان إعادة رفعه إذا لم يكن الأصل محفوظًا فيها.
+### Assistants and sign-in
 
-تستخدم DOCX الفقرات والجداول بترتيبها الأصلي؛ لا تستخرج النص من الصور المضمنة.
-ملفات DOC القديمة تحتاج [LibreOffice](https://www.libreoffice.org/download/download-libreoffice/)
-لتحويلها تلقائيًا إلى DOCX بوضع خفي. يُكتشف في مسارات Windows المعتادة، أو اضبط
-`LIBREOFFICE_PATH`. مهلة التحويل دقيقتان. باقي الصيغ تعمل دون LibreOffice.
+The React and TypeScript interface is in Arabic. It opens on the assistant
+cards. Create an assistant with a name and optional description and answer
+instructions, then open its card to access its chat and library. Each assistant
+has its own files, index, extracted images, and conversations. You can edit an
+assistant or delete it and its data after confirmation.
 
-`WEB_DATA_DIR` افتراضيًا `storage/library`. في الوضع الجديد، لكل حساب أو ضيف مساحة
-في `owners/accounts/<id>/` أو `owners/guests/<id>/` تحوي سجله وإعداداته ومساعديه.
-الملفات الأصلية تُحفظ في Supabase Storage الخاص عند ضبط `RAG_SUPABASE_URL` و
-`RAG_SUPABASE_SECRET_KEY`. جهّز الحاوية مرة واحدة عبر
-`uv run python scripts/configure_storage.py`؛ الملفات المحلية تصبح كاشًا للمعالجة
-والتنزيل، ويمكن استرجاع الأصل من Supabase عند فقدانه. المساعدون ومعلومات الملفات
-والمحادثات والإعدادات والفهارس والصور المستخرجة ما زالت محلية؛ نقلها لقاعدة بيانات
-مشتركة في فيتشرات لاحقة. التفاصيل في [تخزين Supabase](https://github.com/HUSSAMX7/Advanced_RAG/blob/main/docs/specs/supabase-storage.md).
-الوضع المحلي القديم متاح صراحة عبر `WEB_IDENTITY_ENABLED=false`
-للتوافق المحلي، ويستخدم سجل المساعدين والإعدادات الأصلي. بيانات كل مساعد
-داخل `assistants/<id>/`: المكتبة في `library/`، والفهرس في `index/`، والمحادثات
-في `conversations/`. API الواجهة يستخدم `/api/assistants/<id>/files` و`/sessions`
-و`/sources`؛ تبقى مسارات API القديمة ومجلدات CLI منفصلة للتوافق مع التكاملات السابقة.
-`RAG_MAX_UPLOAD_BYTES` (أو الاسم القديم `MAX_UPLOAD_BYTES`)
-افتراضيًا 50 MiB لكل ملف؛ إعدادات `.env.example` تحدده بـ20 MiB. مفاتيح OpenAI والاستخراج تبقى في الخادم، ولا تُرسل
-إلى المتصفح. ملفات TXT وWord تحتاج OpenAI للـembeddings والشات؛ PDF يحتاج أيضًا
-إعداد مزوّد الاستخراج المذكور أدناه.
+Email sign-in through Supabase Auth is optional. Each account or guest session
+has separate data, settings, and API keys. Guests have access to all features.
+A renewal prompt appears every 15 minutes with a one-minute grace period.
+Guest data is deleted when the session ends or expires. Refreshing preserves
+the session; closing and reopening starts a new one. Server cleanup uses a
+close notification with an expiration fallback. Signing in does not transfer
+guest work to the account.
 
-الخادم يستخدم عامل تشغيل واحدًا؛ قفل التطبيق يمنع تشغيل خادمين على نفس بياناته.
-التدريب والبحث المتعلق بالموديلات المحلية يُنفّذان بالتتابع بين المساعدين.
-الفهرس يُحفظ في نسخ مرحلية، ثم يُفعّل بمؤشر ذري. الإلغاء قبل التفعيل لا يغيّر
-الفهرس السابق، وإعادة المحاولة لن تكرر مقاطع الملف. حذف المقاطع يعيد بناء الفهرس
-من المتجهات المتبقية دون إعادة embeddings. البحث يُحدّث عند تغير الفهرس، وتُراجع
-حالات الملفات والعمليات غير المكتملة عند إعادة تشغيل الخادم.
+See [email sign-in setup](setup-email-signin.md) and
+[accounts and guest sessions](specs/identity-and-guest-sessions.md).
 
-يتطلب Python 3.13 و`uv`.
+### Settings and API keys
+
+In **Settings**, enter your OpenAI key, choose your models, and select a PDF
+extraction provider. LlamaParse also requires its own API key.
+
+Keys are encrypted at rest and are not returned to the browser.
+`WEB_CREDENTIAL_ENCRYPTION_KEY` provides portable encryption for servers;
+without it, the app uses local Windows protection. Web settings take precedence
+over `.env` and apply after saving without a restart. `.env` remains the source
+of initial configuration and CLI settings.
+
+Settings cannot be saved while that user has training or an answer in progress.
+The embedding model cannot change while any of the user's assistants has
+indexed files: remove their indexes, change the model, then index them again.
+CLI keys from `.env` are not copied into web accounts or guest sessions; each
+user supplies their own keys.
+
+### Upload, train, and ask
+
+Supported formats are **PDF, DOCX, DOC, and UTF-8 TXT**.
+
+- Uploading only saves the file. Click **Train** to extract content, split it,
+  create embeddings, and publish its index. This is indexing, not model training.
+- **Trained** appears only after the completed index becomes active. The library
+  shows extraction, chunking, and storage progress. Queued files run sequentially.
+- **Stop** cancels queued or active training. An embedding request already in
+  progress finishes, but its result is discarded without being published.
+- **Remove indexing** removes a file's chunks from search and keeps the original.
+  **Delete file** removes both. Previous conversations remain saved.
+- Answer sources show the file name, page when available, and supporting passage.
+  Opening an old citation after its source is removed shows it as unavailable.
+- Files previously indexed through the CLI appear in the library. Downloading
+  or retraining them requires uploading the original if it is not already saved.
+
+The assistant is prompted to treat short, substantive questions as potentially
+related to its files and search when their contents may be relevant, even
+without an explicit search request. Greetings and clearly general questions
+remain available without files. Tool selection is automatic, so this prompting
+does not force a search for every message.
+
+DOCX extraction preserves paragraph and table order; it does not extract text
+from embedded images. Legacy DOC files require
+[LibreOffice](https://www.libreoffice.org/download/download-libreoffice/) for
+automatic conversion to DOCX in headless mode. The app checks common Windows
+installation paths, or you can set `LIBREOFFICE_PATH`. Conversion has a two-minute
+timeout. Other formats do not require LibreOffice.
+
+### Local LightOnOCR
+
+Selecting local LightOnOCR starts the model automatically when you train a PDF.
+No separate OCR server, URL, or OCR key is required. The first run downloads
+`lightonai/LightOnOCR-2-1B` (approximately 2 GB); later runs use the cache.
+
+OCR runs on CPU in a separate process, one page at a time. The process exits
+after extraction or cancellation, and BGE is released from memory before OCR
+starts. Failed pages or truncated text fail training rather than saving an
+incomplete document. There is no automatic cloud fallback.
+
+Chat, PDF section detection, and embeddings still use OpenAI. CPU extraction
+can be slow, and Arabic support is limited according to the
+[developers' paper](https://arxiv.org/html/2601.14251v1).
+
+### PDF images and diagrams
+
+Newly uploaded PDFs support images and diagrams; older files retain their
+existing processing behavior. During training, images are extracted and given
+Arabic and English descriptions for retrieval. These descriptions are used by
+FAISS, BM25, and reranking. The answer model receives the original text and
+associated images. Source previews show images with a zoom option. If the
+relationship between a figure and its text is unclear, the full original page
+image is attached instead.
+
+Image descriptions and answers use `AGENT_MODEL` and the saved OpenAI key.
+Choose a vision-capable model even when using local OCR. Images are stored
+under the library's local `images/` directory (`storage/library/images/` in
+legacy local mode). Removing indexing or deleting a file removes its indexed
+image assets. Some image failures do not prevent successful text and images
+from being saved; the library displays a warning.
+
+See [multimodal RAG](specs/multimodal-rag.md) for behavior and limitations.
+
+## Storage and runtime behavior
+
+`WEB_DATA_DIR` defaults to `storage/library`. Each account or guest has a
+workspace under `owners/accounts/<id>/` or `owners/guests/<id>/` containing its
+records, settings, and assistants. Each assistant's directory contains
+`library/`, `index/`, and `conversations/`.
+
+When `RAG_SUPABASE_URL` and `RAG_SUPABASE_SECRET_KEY` are configured, original
+uploads use private Supabase Storage. Configure the bucket once:
 
 ```powershell
-uv sync
-if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+uv run python scripts/configure_storage.py
 ```
 
-اضبط `OPENAI_API_KEY` للأقسام والـembeddings، ثم إعدادات المزوّد:
+Local originals then act as a processing and download cache and can be restored
+from Supabase if missing. Assistant records, file metadata, conversations,
+settings, indexes, and extracted images remain local. See
+[Supabase file storage](specs/supabase-storage.md).
 
-- `llamaparse`: اضبط `LLAMA_PARSE_API_KEY`.
-- `lightonocr`: اضبط `LIGHTONOCR_LOCAL=true` لتشغيل محلي مباشر، أو
-  `LIGHTONOCR_URL` لخادم OCR منفصل مع `LIGHTONOCR_LOCAL=false`.
+Set `WEB_IDENTITY_ENABLED=false` explicitly to use the legacy local workspace
+and its original assistant registry and settings. The web API uses
+`/api/assistants/<id>/files`, `/sessions`, and `/sources`. Legacy API routes and
+CLI directories remain separate for compatibility.
 
-`LIGHTONOCR_URL` يمكن أن يكون محليًا، مثل
-`http://localhost:8000/v1/chat/completions`. المشروع يتصل بخادم منفصل يشغّل
-LightOnOCR (واجهة متوافقة مع OpenAI، مثل vLLM) حتى عندما يعمل على نفس الجهاز.
-كتابة العنوان لا تشغّل خادم OCR؛ يجب تشغيله أولًا. يستخدمه استخراج PDF فقط عند
-اختيار `PDF_PROVIDER=lightonocr` أو تمرير `--provider lightonocr` في وضع الخادم.
-صفحة الويب تستخدم التشغيل المحلي المباشر وتتجاهل هذا العنوان.
+`RAG_MAX_UPLOAD_BYTES` (also accepted as `MAX_UPLOAD_BYTES`) defaults to 50 MiB
+per file; `.env.example` sets it to 20 MiB. OpenAI and extraction keys stay on
+the server. Word and TXT need OpenAI for embeddings and chat; PDF also needs
+an extraction provider.
+
+Run the server with one worker. An application lock prevents two servers from
+using the same data. Training and retrieval operations involving local models
+are serialized across assistants.
+
+Indexes are written as staged generations and activated with an atomic pointer.
+Cancellation before activation preserves the previous index. Retrying a file
+does not duplicate its chunks. Removing chunks rebuilds the index from remaining
+vectors without recomputing embeddings. Retrieval refreshes when the index
+changes, and incomplete file operations are reconciled at server startup.
+
+## CLI: ingest PDFs
+
+Set `OPENAI_API_KEY` for section detection and embeddings, then configure the
+extraction provider in `.env`:
+
+- `llamaparse`: set `LLAMA_PARSE_API_KEY`.
+- `lightonocr`: set `LIGHTONOCR_LOCAL=true` for direct local execution, or set
+  `LIGHTONOCR_URL` and `LIGHTONOCR_LOCAL=false` for a separate OCR server.
+
+`LIGHTONOCR_URL` may point to a local server, such as
+`http://localhost:8000/v1/chat/completions`. Server mode connects to a separately
+running LightOnOCR service with an OpenAI-compatible API, such as vLLM.
+Setting the URL does not start that server. This mode applies to PDF extraction
+when `PDF_PROVIDER=lightonocr` or `--provider lightonocr` is selected. The web
+app's local OCR option uses direct execution and ignores this URL.
 
 ```powershell
 uv run main.py "D:/documents/report.pdf"
 uv run main.py "D:/documents/report.pdf" --provider lightonocr
 ```
 
-يمكن تمرير أكثر من ملف. التشغيل يحفظ المقاطع محليًا ويطبع حالة كل ملف بصيغة
-JSON: `file_id` و`file_name` و`success` و`error`. الخيارات الأخرى:
-`--persist-dir` و`--assistant-id`.
+You can pass multiple files. The CLI saves chunks locally and prints a JSON
+result for each file: `file_id`, `file_name`, `success`, and `error`. Other options
+include `--persist-dir` and `--assistant-id`.
 
-مسار الحفظ الافتراضي `storage/pdf_documents`، ويُضبط عبر `FAISS_PERSIST_DIR`
-أو `--persist-dir`. يُحفظ الفهرس مع النصوص والـmetadata وربطها بالمتجهات.
-التشغيل التالي يحمّل الفهرس ويضيف المقاطع الجديدة. استخدم نفس نموذج embeddings
-عند الإضافة والاسترجاع؛ تغيير النموذج يتطلب مسارًا جديدًا وإعادة الفهرسة.
+The default index directory is `storage/pdf_documents`, configurable through
+`FAISS_PERSIST_DIR` or `--persist-dir`. The saved index includes text, metadata,
+and vector mappings. Subsequent runs load it and add new chunks. Use the same
+embedding model for ingestion and retrieval; changing it requires a new
+directory and reindexing.
 
 ```python
 from dotenv import load_dotenv
@@ -175,68 +209,71 @@ from advanced_rag.storage import load_faiss_index
 
 load_dotenv()
 index = load_faiss_index(Settings())
-results = index.as_retriever(similarity_top_k=5).retrieve("سؤال عن المستند")
+results = index.as_retriever(similarity_top_k=5).retrieve("A question about the document")
 ```
 
-الفهرس `IndexFlatL2` يبحث بحثًا دقيقًا في كل المتجهات. وقت البحث واستهلاك الذاكرة
-يزيدان مع عدد المقاطع. درجات النتائج مسافات L2 مربعة؛ الأقل أقرب.
-تكامل FAISS المستخدم لا يدعم فلترة metadata أو حذف المستندات مباشرة؛ إزالة ملف
-من المكتبة تعيد بناء الفهرس من المتجهات المتبقية. التخزين مخصص للتشغيل المحلي،
-مع قفل يمنع أكثر من عملية كتابة على مجلد الفهرس في كل مرة.
+`IndexFlatL2` performs exact search over all vectors. Search time and memory
+usage grow with the number of chunks. Scores are squared L2 distances; lower
+is closer. The FAISS integration does not directly support metadata filtering
+or document deletion; the library rebuilds the index from remaining vectors
+when removing a file. A directory lock allows only one writer at a time.
 
-## سؤال الإيجنت
+## CLI: chat with the agent
 
-بعد إدخال ملفات PDF، ضع `OPENAI_API_KEY` وشغّل:
+After ingesting PDFs, set `OPENAI_API_KEY` and run:
 
 ```powershell
 uv run advanced-rag-chat
-uv run advanced-rag-chat --question "كم قيمة الفاتورة ZX-774؟"
-uv run advanced-rag-chat --session "معرّف-الجلسة-الذي-ظهر-لك"
+uv run advanced-rag-chat --question "What is the amount of invoice ZX-774?"
+uv run advanced-rag-chat --session "your-saved-session-uuid"
 uv run advanced-rag-chat --persist-dir storage/pdf_documents --sessions-dir chat_sessions
 ```
 
-للخروج من الشات اكتب `/exit`. النتيجة تعرض الإجابة، مراجع الملفات وأرقام الصفحات،
-ومعرّف الجلسة UUID. استخدام `--session` يتطلب جلسة محفوظة؛ لا ينشئ جلسة بديلة عند الخطأ.
-تُحفظ الأسئلة والإجابات والمصادر محليًا في `chat_sessions/`، ويُرسل تاريخ الجلسة
-كاملًا بالترتيب مع كل سؤال، مع تمييز رسائل المستخدم وردود المودل كمحادثة سابقة.
-إذا تجاوز الطلب سعة المودل، تُلخّص الرسائل القديمة تلقائيًا بالمودل المحدد للشات؛
-يُحفظ الملخّص مع الإجابة الناجحة ويُستخدم لاحقًا مع الرسائل التي لم يشملها، ويُحدّث
-عند الحاجة مع إبقاء آخر 10 تبادلات كاملة. تبقى جميع الرسائل الأصلية محفوظة وظاهرة.
-الملخّص سياق للمحادثة وليس دليلًا من الملفات. التلخيص يضيف طلبات للمودل عند امتلاء
-السعة. إذا ظلت الرسائل الحديثة والسؤال ونتائج البحث أكبر من السعة، يظهر خطأ واضح.
-لا يُحفظ السؤال الذي فشل تنفيذه ولا أي تغيير في الذاكرة ناتج عن طلب فاشل.
-شغّل عملية شات واحدة لكل جلسة في كل مرة.
+Type `/exit` to leave. Results include the answer, file and page references,
+and session UUID. `--session` requires an existing saved session; an invalid
+ID does not silently create a replacement. Run only one chat process per session.
 
-يجيب المودل عن الأسئلة العامة مباشرة. أداة `search_documents` تبحث عند الحاجة
-مرة واحدة لكل سؤال متعلق بملفاتك في جميع ملفات الفهرس. تجمع حتى
-20 نتيجة من المتجهات و20 من الكلمات، تدمجها بـRRF، ثم ترتّب أفضل 20 عبر BGE محليًا
-وترجع أفضل 5. يستخدم الإيجنت OpenAI SDK مباشرة دون LangChain أو Agents SDK.
-بحث واحد لا يعني طلب OpenAI واحدًا: توجد طلبات صياغة استعلام الأداة، embedding
-للسؤال وتوليد الإجابة؛ ترتيب النتائج محلي ولا يستدعي OpenAI.
+Questions, answers, and sources are stored locally in `chat_sessions/`. Each
+question includes the conversation history in order, distinguishing user
+messages from model responses. If the request exceeds the model's context
+capacity, older turns are summarized automatically with the selected chat model,
+while retaining the latest 10 complete exchanges. All original messages remain
+saved and visible. The summary is conversation context, not document evidence.
 
-واجهة الويب تولّد عنوان المحادثة من أول رسالة بمهمة OpenAI مستقلة بالتوازي مع
-الإجابة. يظهر مؤشر تحميل للعنوان في القائمة ورأس المحادثة فور الإرسال، ويظهر
-العنوان فور جاهزيته حتى لو لم تصل الإجابة بعد؛ الإجابة لا تنتظر اكتمال العنوان.
-تُحفظ حالة العنوان وتُستأنف المهمة عند إعادة تشغيل الخادم. `TITLE_MODEL` افتراضيًا
-`gpt-6-luna`، ويمكن تغييره من الإعدادات. عند فشل توليد العنوان، تظهر حالة تعذّر
-التسمية وزر إعادة المحاولة دون نسخ الرسالة أو تعطيل الإجابة. رسائل المتابعة لا تعيد توليد العنوان.
+Summarization adds model requests as needed. If the recent messages, question,
+and search results still exceed capacity, the request fails with a clear error.
+Failed questions and memory changes from failed requests are not saved.
 
-`AGENT_MODEL` افتراضيًا `gpt-6-luna`، و`RERANK_MODEL` افتراضيًا
-`BAAI/bge-reranker-v2-m3` ([صفحة النموذج](https://huggingface.co/BAAI/bge-reranker-v2-m3)).
-يشغّل BGE عبر `sentence-transformers` على CPU، ويحمّله مرة واحدة عند أول بحث
-ويحتفظ به في الذاكرة. تنزيل الأوزان أول مرة يحتاج اتصالًا بالإنترنت؛ التشغيل
-التالي يستخدم ذاكرة Hugging Face المحلية. يمكن وضع مسار مجلد نموذج محلي في
-`RERANK_MODEL`. إصدار PyTorch المثبت مخصص للمعالج.
-`RERANK_BATCH_SIZE` افتراضيًا 1 لتقليل الذاكرة، و`RERANK_MAX_LENGTH` افتراضيًا
-2048 رمزًا لكل زوج سؤال/مقطع؛ النصوص الأطول تُقتطع أثناء تقييم الصلة، وتبقى
-المقاطع الأصلية كاملة في الإجابة. قد يكون الترتيب بطيئًا على CPU؛ ينفّذ خارج
-حلقة الخادم، بالتتابع لمنع تحميل نسخ متعددة من النموذج.
-يمكن تعديل أعداد النتائج عبر
-`RETRIEVAL_CANDIDATES` و`RETRIEVAL_TOP_K`. تطبيع الكلمات العربية والإنجليزية يحدث
-داخل البحث اللفظي فقط؛ النص الأصلي والأرقام والتواريخ تبقى كما هي. يُبنى BM25 من
-الفهرس عند بدء الشات؛ أعد فتح الشات بعد إضافة مستندات جديدة.
+### Retrieval and model settings
 
-للاستخدام من Python:
+The model answers general questions directly. When needed, `search_documents`
+searches the index once for a document-related question. It collects up to 20
+semantic and 20 keyword results, merges them with RRF, reranks the best 20
+locally with BGE, and returns the top 5. The agent uses the OpenAI SDK directly,
+without LangChain or the Agents SDK.
+
+One search is not one OpenAI request: tool-query generation, question embeddings,
+and answer generation can require separate requests. Reranking runs locally.
+
+`AGENT_MODEL` defaults to `gpt-6-luna`. `RERANK_MODEL` defaults to
+[`BAAI/bge-reranker-v2-m3`](https://huggingface.co/BAAI/bge-reranker-v2-m3).
+BGE runs on CPU through `sentence-transformers`, loads on first search, and
+stays in memory. The first download needs internet access; later runs use the
+Hugging Face cache. `RERANK_MODEL` can also be a local model directory.
+The configured PyTorch distribution is CPU-only.
+
+`RERANK_BATCH_SIZE` defaults to 1 to reduce memory use. `RERANK_MAX_LENGTH`
+defaults to 2048 tokens per question/passage pair. Longer pairs are truncated
+for relevance scoring; original passages remain intact for answer generation.
+CPU reranking may be slow. It runs outside the server event loop and is
+serialized to avoid loading multiple copies of the model.
+
+Adjust candidate and result counts with `RETRIEVAL_CANDIDATES` and
+`RETRIEVAL_TOP_K`. Arabic and English normalization applies only to keyword
+search; original text, numbers, and dates are preserved. CLI chat builds BM25
+when it starts, so restart it after adding documents.
+
+For Python usage:
 
 ```python
 import asyncio
@@ -252,45 +289,79 @@ async def main():
     settings = Settings()
     context = load_search_context(settings)
     async with AsyncOpenAI(api_key=require_openai_key(settings)) as client:
-        result = await ask_agent("ما تفاصيل الفاتورة؟", context=context,
+        result = await ask_agent("What are the invoice details?", context=context,
                                  client=client, settings=settings)
         print(result["answer"], result["sources"], result["session_id"])
-        # مرّر session_id=result["session_id"] للسؤال التالي لاستكمال المحادثة.
+        # Pass session_id=result["session_id"] to continue the conversation.
 
 asyncio.run(main())
 ```
 
-الـreranking غير الصالح أو أخطاء API تتوقف بخطأ واضح؛ لا تُرجع نتائج غير مرتبة
-بصمت. تُراجع معرّفات المصادر وأرقام المراجع قبل حفظ الإجابة. توجيه الإيجنت هو
-التصريح عند عدم كفاية الأدلة؛ صحة صياغة الإجابة تحتاج تقييمًا على مستنداتك الفعلية.
+Invalid reranking output or API failures produce explicit errors rather than
+silently returning unranked results. Source IDs and citation numbers are
+validated before saving the answer. The agent is instructed to acknowledge
+insufficient evidence; answer quality still needs evaluation on your documents.
 
-الأقسام تستخدم مودل المحادثة ومفتاح OpenAI المختارين، وتُربط بالصفحات حسب رقم بداية القسم.
-إذا لم تُستخرج أقسام، يُستخدم `0: اسم الملف`.
+### Conversation titles
 
-`postprocess` موجود داخل LightOnOCR فقط، ويمكن تعطيله بإعداد
-`LIGHTONOCR_POSTPROCESS=false`. الكود الأصلي ينظف التكرار وبعض الكلمات العربية
-وجداول HTML، ويتجاوز الصفحات الفارغة. فشل استخراج صفحة يوقف تدريب الملف.
+The web app generates a title from the first message in an independent OpenAI
+task alongside the answer. The sidebar and conversation header show a loading
+indicator until the title is ready. Answer generation does not wait for it.
+Title state is persisted, and pending tasks resume after server restart.
 
-إعدادا LlamaParse الأصليان `tier` و`version` محفوظان؛ نسخة SDK المثبتة `0.6.54`
-تصدر تنبيهًا بأنها تتجاهلهما.
+`TITLE_MODEL` defaults to `gpt-6-luna` and can be changed in Settings. A failed
+title shows an error state and a retry button without duplicating the message
+or blocking the answer. Follow-up messages do not regenerate the title.
 
-## التحقق المحلي
+## Extraction details
 
-### صور PDF في المكتبة
+Section extraction uses the selected chat model and OpenAI key. Sections are
+mapped to pages by their starting page number. If no sections are extracted,
+the fallback is `0: file name`.
 
-ملفات PDF التي ترفعها من الآن تدعم الصور والرسومات، وتحتفظ الملفات القديمة
-بمعالجتها الحالية. أثناء التدريب تُستخرج الصور ويُولّد لها وصف عربي وإنجليزي
-للبحث. الوصف يدخل FAISS وBM25 وترتيب النتائج فقط؛ مودل الإجابة يستقبل النص
-الأصلي والصور المرتبطة به، وتظهر الصورة ضمن المصدر مع إمكانية تكبيرها.
-إذا لم يتضح ارتباط الشكل بالنص، تُرفق صورة الصفحة الأصلية كاملة.
+LightOnOCR's `postprocess` cleans repetitions, selected Arabic words, and HTML
+tables, and skips blank pages. Disable it with `LIGHTONOCR_POSTPROCESS=false`.
+A page extraction failure stops training for the file.
 
-التوصيف والإجابة يستخدمان `AGENT_MODEL` ومفتاح OpenAI المحفوظ؛ اختر مودلًا يدعم
-قراءة الصور، حتى عند اختيار OCR محلي. الصور محفوظة محليًا في
-`storage/library/images/`؛ إزالة الفهرسة أو حذف الملف يزيل أصول الصور التابعة
-للفهرس. فشل معالجة بعض الصور لا يمنع حفظ النص والصور الناجحة، ويظهر تنبيه في
-المكتبة. تفاصيل السلوك والحدود في [تصميم دعم الصور](https://github.com/HUSSAMX7/Advanced_RAG/blob/main/docs/specs/multimodal-rag.md).
+The original LlamaParse `tier` and `version` settings are retained, but pinned
+SDK version `0.6.54` warns that it ignores them.
 
-### أوامر الفحص
+## Code organization
+
+```text
+src/advanced_rag/
+├── ingestion/                # Document extraction and chunk preparation
+│   ├── providers/
+│   │   ├── llamaparse.py     # Page extraction through LlamaParse
+│   │   └── lightonocr.py     # LightOnOCR extraction and postprocessing
+│   ├── sections.py          # Section extraction, review, and page mapping
+│   ├── chunking.py          # Sections followed by SentenceSplitter
+│   └── pipeline.py          # Extract, prepare chunks, and store
+├── retrieval/                # FAISS + BM25 + RRF and local BGE reranking
+├── agent/                    # OpenAI agent, CLI chat, and session storage
+├── web/                      # FastAPI organized by feature
+│   ├── app.py                # App creation, routers, and lifecycle
+│   ├── identity/             # Accounts, guest sessions, and data isolation
+│   ├── assistants/           # Assistants and their libraries
+│   ├── files/                # Upload, download, training, and sources
+│   ├── conversations/        # Conversations, answers, and titles
+│   └── settings/             # User settings and encrypted credentials
+├── storage.py                # Embeddings and FAISS persistence
+├── models.py                 # File metadata and processing results
+├── config.py                 # Runtime configuration
+└── cli.py                    # Pipeline entry point
+```
+
+`process_pdfs` coordinates processing and file results. `create_chunks` extracts
+sections, maps them to pages, and splits content without storing it.
+`storage.py` manages the persisted index. Tests follow the same boundaries.
+
+Web features group `routes.py`, `schemas.py`, `services.py`, and `repository.py`
+where those responsibilities exist. Operations and persistence use functions
+with explicit dependencies. Classes serve concrete needs such as validation
+contracts or lock and task state. See [backend architecture](architecture.md).
+
+## Local checks
 
 ```powershell
 uv run pytest -q
@@ -298,5 +369,5 @@ uv run ruff check src/advanced_rag/agent src/advanced_rag/retrieval tests
 uvx ty check src/advanced_rag/agent src/advanced_rag/retrieval src/advanced_rag/config.py
 ```
 
-الاختبارات تستخدم استجابات وهمية وFAISS فعليًا داخل مجلدات مؤقتة؛ لا تستدعي خدمات الاستخراج
-أو OpenAI الفعلية.
+Tests use mocked provider responses and real FAISS indexes in temporary
+directories. They do not call live extraction services or OpenAI.
