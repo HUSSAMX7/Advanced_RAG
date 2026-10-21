@@ -37,8 +37,9 @@ flowchart TD
         Lexical["BM25 keyword search: up to 20 hits"] --> F
     end
     subgraph Reranking["Stage 2: relevance reranking"]
-        F --> G["BGE cross-encoder: rerank candidates → top 5"]
+        G["BGE cross-encoder: rerank candidates → top 5"]
     end
+    F --> G
     G --> H["Original text + related images → answer with sources"]
 ```
 
