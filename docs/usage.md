@@ -315,9 +315,25 @@ or blocking the answer. Follow-up messages do not regenerate the title.
 
 ## Extraction details
 
-Section extraction uses the selected chat model and OpenAI key. Sections are
-mapped to pages by their starting page number. If no sections are extracted,
-the fallback is `0: file name`.
+PDF text goes through these steps before indexing:
+
+1. The selected chat model extracts numbered section headings from each page,
+   including the title, starting page, and subsection flag. The prompt requires
+   headings to begin with `#` and contain a section number; figures and tables
+   do not count as sections.
+2. A separate LLM call reviews the collected sections and selects valid entries.
+3. Each page is annotated with `section_id` and `sub_section_id` according to
+   section starting pages. If no valid sections remain, both fields use
+   `0: file name`.
+4. `SentenceSplitter(chunk_size=1024, chunk_overlap=50)` splits the annotated
+   page nodes into chunks, preserving their metadata. Empty chunks are removed.
+
+Section detection adds context to the chunks; it does not split the document
+at heading boundaries. Word and TXT skip LLM section extraction, use the filename
+as section metadata, and apply the same sentence splitter. Image-only PDFs can
+skip text chunking and continue through visual enrichment when enabled.
+
+Section extraction and review use the selected chat model and OpenAI key.
 
 LightOnOCR's `postprocess` cleans repetitions, selected Arabic words, and HTML
 tables, and skips blank pages. Disable it with `LIGHTONOCR_POSTPROCESS=false`.

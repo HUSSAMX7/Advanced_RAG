@@ -19,9 +19,14 @@ The goal: demonstrate high-quality RAG retrieval and answers without manually cl
 ```mermaid
 flowchart TD
     A["Upload PDF / Word / TXT"] --> B["Extract content"]
-    B --> C["Detect PDF sections + split text into chunks"]
-    C --> D["Embeddings + FAISS + BM25"]
-    B --> V["Extract PDF images + describe them for search"]
+    B -- PDF text --> C["LLM: extract numbered section headings per page"]
+    C --> R["LLM: review and filter sections"]
+    R --> M["Map section + subsection metadata to pages"]
+    B -- Word / TXT --> W["Use filename as section metadata"]
+    M --> S["SentenceSplitter: 1024 tokens / 50 overlap"]
+    W --> S
+    S --> D["Embeddings + FAISS + BM25"]
+    S -- PDF visuals enabled --> V["Extract PDF images + describe them for search"]
     V --> D
     Q["Your question"] --> E["Hybrid retrieval"]
     D --> E
@@ -29,6 +34,9 @@ flowchart TD
     F --> G["BGE reranking → top 5 passages"]
     G --> H["Original text + related images → answer with sources"]
 ```
+
+PDF chunks inherit page and section metadata; headings do not define chunk boundaries.
+If no PDF sections are found, the filename is used as the section fallback.
 
 <details>
 <summary>More screenshots</summary>
