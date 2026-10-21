@@ -37,16 +37,16 @@ PDF chunks inherit page and section metadata; headings do not define chunk bound
 flowchart TD
     Q["Search query"]
     subgraph Candidates["Stage 1: candidate retrieval"]
-        Dense["FAISS: semantic search"] -->|"up to 20 hits"| F["RRF: merge rankings<br/>keep up to 20 unique candidates"]
-        Lexical["BM25: keyword search"] -->|"up to 20 hits"| F
+        Dense["FAISS<br/>Semantic search"] -->|"up to 20"| F["RRF fusion<br/>Top 20 candidates"]
+        Lexical["BM25<br/>Keyword search"] -->|"up to 20"| F
     end
     subgraph Reranking["Stage 2: BGE reranking"]
-        G["Score each query–candidate pair<br/>and sort by relevance"] --> H["Keep the top 5 results"]
+        G["BGE cross-encoder<br/>Rerank → top 5"]
     end
     Q --> Dense
     Q --> Lexical
     F --> G
-    H --> Answer["Generate answer from original text + related images<br/>with source citations"]
+    G --> Answer["LLM answer<br/>Original text + images<br/>Source citations"]
 ```
 
 Both searches use the indexed chunks and image descriptions. BGE reranks the
