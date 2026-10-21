@@ -14,7 +14,7 @@ The goal: demonstrate high-quality RAG retrieval and answers without manually cl
 
 **PDF · Word · TXT** | Hybrid search + reranking | PDF images & diagrams | Answers with sources
 
-## How it works
+## Chunking process
 
 ```mermaid
 flowchart TD
@@ -28,6 +28,16 @@ flowchart TD
     S --> D["Embeddings + FAISS + BM25"]
     S -- PDF visuals enabled --> V["Extract PDF images + describe them for search"]
     V --> D
+```
+
+PDF chunks inherit page and section metadata; headings do not define chunk boundaries.
+If no PDF sections are found, the filename is used as the section fallback.
+
+## Retrieval process
+
+```mermaid
+flowchart TD
+    D["Indexed chunks + image descriptions"]
     Q["Your question"] --> Dense
     Q --> Lexical
     D --> Dense
@@ -43,10 +53,8 @@ flowchart TD
     G --> H["Original text + related images → answer with sources"]
 ```
 
-PDF chunks inherit page and section metadata; headings do not define chunk boundaries.
-If no PDF sections are found, the filename is used as the section fallback.
-Retrieval first finds candidates, then reranks them; it does not search sections
-and then search their chunks. The 20-candidate and top-5 limits are configurable defaults.
+Retrieval first finds candidates, then reranks them.
+The 20-candidate and top-5 limits are configurable defaults.
 
 <details>
 <summary>More screenshots</summary>
