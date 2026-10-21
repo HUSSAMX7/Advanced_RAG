@@ -9,7 +9,7 @@ PDF → LlamaParse / LightOnOCR → استخراج الأقسام ومراجعت
     → ربط الأقسام بالصفحات → SentenceSplitter (1024 / overlap 50) → FAISS
 ```
 
-> نسخة التطبيق الحالية في فرع `develop`. ارجع إلى [صفحة المشروع](../README.md) لعرض التجربة بالصور وخطوات البدء.
+> نسخة التطبيق الحالية في فرع `main`. ارجع إلى [صفحة المشروع](../README.md) لعرض التجربة بالصور وخطوات البدء.
 
 ## الملفات
 
@@ -43,7 +43,7 @@ src/advanced_rag/
 
 كل فيتشر في الويب يجمع `routes.py` و`schemas.py` و`services.py` و`repository.py`.
 العمليات والتخزين فنكشنز بتبعيات واضحة؛ الكلاسات تستخدم عند حاجة فعلية مثل
-نماذج التحقق وحالة الأقفال والمهام. التفاصيل في [هيكلة الباكند](https://github.com/HUSSAMX7/Advanced_RAG/blob/develop/docs/architecture.md).
+نماذج التحقق وحالة الأقفال والمهام. التفاصيل في [هيكلة الباكند](https://github.com/HUSSAMX7/Advanced_RAG/blob/main/docs/architecture.md).
 
 ## التشغيل
 
@@ -58,7 +58,7 @@ Supabase Auth، ولكل حساب أو جلسة ضيف بياناته وإعدا
 بياناته عند إنهاء الجلسة أو انتهائها. تحديث الصفحة يحتفظ بها، وإغلاقها ثم فتحها
 يبدأ جلسة جديدة؛ تنظيف الخادم يعتمد على إشعار الإغلاق مع انتهاء احتياطي.
 الدخول للحساب لا ينقل شغل الضيف. التفاصيل والإعداد في
-[الفيتشر الأولى](https://github.com/HUSSAMX7/Advanced_RAG/blob/develop/docs/specs/identity-and-guest-sessions.md).
+[الفيتشر الأولى](https://github.com/HUSSAMX7/Advanced_RAG/blob/main/docs/specs/identity-and-guest-sessions.md).
 الصيغ المدعومة: PDF وDOCX وDOC وTXT (UTF-8).
 
 المساعد يفترض أن الأسئلة الموضوعية والمختصرة غالبًا تتعلق بملفاته؛ يُوجّه للبحث
@@ -116,7 +116,7 @@ Vite يمرر طلبات `/api` إلى الخادم المحلي.
 `uv run python scripts/configure_storage.py`؛ الملفات المحلية تصبح كاشًا للمعالجة
 والتنزيل، ويمكن استرجاع الأصل من Supabase عند فقدانه. المساعدون ومعلومات الملفات
 والمحادثات والإعدادات والفهارس والصور المستخرجة ما زالت محلية؛ نقلها لقاعدة بيانات
-مشتركة في فيتشرات لاحقة. التفاصيل في [تخزين Supabase](https://github.com/HUSSAMX7/Advanced_RAG/blob/develop/docs/specs/supabase-storage.md).
+مشتركة في فيتشرات لاحقة. التفاصيل في [تخزين Supabase](https://github.com/HUSSAMX7/Advanced_RAG/blob/main/docs/specs/supabase-storage.md).
 الوضع المحلي القديم متاح صراحة عبر `WEB_IDENTITY_ENABLED=false`
 للتوافق المحلي، ويستخدم سجل المساعدين والإعدادات الأصلي. بيانات كل مساعد
 داخل `assistants/<id>/`: المكتبة في `library/`، والفهرس في `index/`، والمحادثات
@@ -288,7 +288,7 @@ asyncio.run(main())
 قراءة الصور، حتى عند اختيار OCR محلي. الصور محفوظة محليًا في
 `storage/library/images/`؛ إزالة الفهرسة أو حذف الملف يزيل أصول الصور التابعة
 للفهرس. فشل معالجة بعض الصور لا يمنع حفظ النص والصور الناجحة، ويظهر تنبيه في
-المكتبة. تفاصيل السلوك والحدود في [تصميم دعم الصور](https://github.com/HUSSAMX7/Advanced_RAG/blob/develop/docs/specs/multimodal-rag.md).
+المكتبة. تفاصيل السلوك والحدود في [تصميم دعم الصور](https://github.com/HUSSAMX7/Advanced_RAG/blob/main/docs/specs/multimodal-rag.md).
 
 ### أوامر الفحص
 

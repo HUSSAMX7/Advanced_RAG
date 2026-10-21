@@ -27,4 +27,4 @@ The goal: demonstrate high-quality RAG retrieval and answers without manually cl
 
 *Real app UI with illustrative data and a preset answer. “Train” indexes your documents.*
 
-[Get the app — develop branch](https://github.com/HUSSAMX7/Advanced_RAG/tree/develop) · [Setup & usage guide (Arabic)](docs/usage.md)
+[Get the app](https://github.com/HUSSAMX7/Advanced_RAG/tree/main) · [Setup & usage guide (Arabic)](docs/usage.md)

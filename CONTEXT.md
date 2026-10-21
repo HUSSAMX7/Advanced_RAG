@@ -1,0 +1,50 @@
+# Domain vocabulary
+
+- **Guest (ضيف)**: a visitor using the application without registering or
+  signing in to an account, with access to all core assistant, document and chat
+  functions. Their application data belongs to a renewable temporary guest
+  session and does not become account data when they sign in.
+- **Guest session (جلسة الضيف)**: a temporary workspace containing one guest's
+  assistants, documents, conversations and service settings. Renewal retains
+  that workspace; ending the session discards it.
+- **Account holder (صاحب الحساب)**: a user who signs in using a verified email
+  address. Their assistants, document libraries and conversations are private
+  to their account; the product has no shared team libraries.
+- **Service settings (إعدادات الخدمات)**: an account holder's or guest session's
+  provider choices, model choices and API credentials. These settings belong to
+  that owner and are independent of other users' settings.
+- **Assistant (مساعد)**: a named knowledge assistant with its own document
+  library and conversations, optionally described by a description and response
+  instructions. Its card opens its workspace.
+- **Library (مكتبة المساعد)**: the collection of uploaded and indexed documents
+  belonging to one assistant.
+- **Training**: extracting text, splitting it into chunks, creating embeddings,
+  and indexing them so chat can search them. It does not change model weights.
+- **Cancel training**: stop an unfinished training operation, retaining the file.
+- **Remove indexing**: exclude a trained document from search, retaining the file.
+- **Delete file**: remove the file and all its indexed chunks from the library.
+- **Conversation**: a saved sequence of questions, answers and source references
+  belonging to one assistant.
+- **Conversation history (session memory)**: the earlier saved questions, answers
+  and source references belonging to the same conversation. It provides context
+  for follow-up questions; earlier answers are not original document evidence.
+- **Conversation summary**: a condensed account of older conversation history,
+  preserving context for later exchanges. It is distinct from the original saved
+  messages and from document evidence.
+- **Source**: an original document excerpt or visual supporting a particular answer.
+- **PDF extraction provider**: the selected service or model that reads a PDF
+  into text before the document is trained for library search.
+- **Local OCR**: reading document images into text with a model running on the
+  same computer as the library application.
+
+## Visual sources
+
+**Document image**:
+An original visual contained in a library document, such as a figure, chart,
+or illustration.
+_Avoid_: Image description
+
+**Image description**:
+A generated textual description of a document image used to help find it.
+It may be incomplete or inaccurate and is distinct from the original visual.
+_Avoid_: Original image, verified visual evidence
