@@ -1,5 +1,16 @@
 # Production readiness design interview
 
+Update 2026-10-21: the user requested a fresh start on Supabase, with local
+application data reset and source code/keys preserved. Permanent local deletion
+was blocked by automatic execution review; old data was instead isolated under
+ignored output/local-data-before-reset-20261021, and the active workspace is
+fresh. Original document bytes
+now use private Supabase Storage; no old data is migrated. This is a separate
+reviewable feature, documented in [supabase-storage.md](supabase-storage.md).
+Application records, indexes and extracted images remain local. The historical
+sequence below describes the earlier plan; Postgres migration is the next
+feature and still requires user approval under AGENTS.md.
+
 Status: first feature implemented and verified locally; backend restructuring
 reviewed and committed. Supabase is connected locally and has accepted a real
 email-link request; receipt and completed sign-in remain unverified. Later

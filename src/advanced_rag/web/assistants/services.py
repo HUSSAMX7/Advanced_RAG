@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from ..files import processing
+from ..files import object_storage, processing
 from ..files.processing import LibraryConflict, LibraryState
 from . import repository
 
@@ -42,6 +42,9 @@ def scoped_settings(state, row):
             "faiss_persist_dir": directory / "index",
             "chat_sessions_dir": directory / "conversations",
             "assistant_instructions": row["instructions"],
+            "document_storage_prefix": state.settings.document_storage_prefix
+            + "/assistants/"
+            + row["id"],
         }
     )
 
@@ -106,6 +109,10 @@ async def finish_delete(state, assistant_id):
     library = state.libraries.get(assistant_id)
     if library is not None:
         await processing.close(library)
+    await asyncio.to_thread(
+        object_storage.delete_workspace,
+        scoped_settings(state, repository.get(state.path, assistant_id, include_deleting=True)),
+    )
     await asyncio.to_thread(repository.remove, state.path, state.root, assistant_id)
     state.libraries.pop(assistant_id, None)
     state.inflight.pop(assistant_id, None)

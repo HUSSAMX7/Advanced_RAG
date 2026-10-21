@@ -4,7 +4,7 @@ from fastapi import APIRouter, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 
 from ..dependencies import LibraryDependency, WorkspaceDependency
-from . import processing, services
+from . import object_storage, processing, services
 
 
 def create_router(prefix):
@@ -38,7 +38,7 @@ def create_router(prefix):
 
     @router.get("/files/{file_id}/download")
     async def download(file_id: str, library: LibraryDependency):
-        path, filename = services.original_file(library, file_id)
+        path, filename = await object_storage.run(services.original_file, library, file_id)
         return FileResponse(path, filename=filename)
 
     @router.get("/sources/{chunk_id}")

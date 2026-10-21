@@ -18,7 +18,7 @@ from ...storage import (
     store_in_faiss,
 )
 from ...visuals import evidence_metadata, evidence_text, image_path, prune_images
-from . import repository
+from . import object_storage, repository
 from .schemas import public
 
 logger = logging.getLogger(__name__)
@@ -202,7 +202,13 @@ async def _train(state, file_id, job):
         if original is None:
             raise ValueError("الملف الأصلي غير متوفر. أعد رفعه لتدريبه.")
         repository.update(state.registry, file_id, status="training", stage="extracting")
-        data = await asyncio.to_thread((repository.uploads(state.registry) / original).read_bytes)
+        path = await asyncio.to_thread(
+            object_storage.original_path,
+            state.settings,
+            repository.uploads(state.registry),
+            original,
+        )
+        data = await asyncio.to_thread(path.read_bytes)
 
         def progress(stage):
             repository.update(state.registry, file_id, stage=stage)
@@ -291,6 +297,9 @@ async def remove(state, file_id, *, delete=False):
             await asyncio.to_thread(remove_file_from_faiss, file_id, state.settings)
             await asyncio.to_thread(_prune_images, state)
             if delete:
+                row = repository.get(state.registry, file_id)
+                if row["original"]:
+                    await asyncio.to_thread(object_storage.delete, state.settings, row["original"])
                 repository.delete(state.registry, file_id)
             else:
                 repository.update(

@@ -37,7 +37,17 @@ class Settings(BaseSettings):
     retrieval_top_k: int = Field(default=5, gt=0)
     chat_sessions_dir: Path = Path("chat_sessions")
     web_data_dir: Path = Path("storage/library")
-    max_upload_bytes: int = Field(default=50 * 1024 * 1024, gt=0)
+    max_upload_bytes: int = Field(
+        default=50 * 1024 * 1024,
+        gt=0,
+        validation_alias=AliasChoices("RAG_MAX_UPLOAD_BYTES", "MAX_UPLOAD_BYTES"),
+    )
+    rag_supabase_url: str | None = None
+    rag_supabase_secret_key: SecretStr | None = None
+    rag_supabase_bucket: str = "documents"
+    rag_supabase_timeout_seconds: float = Field(default=30, gt=0)
+    # Internal namespace, derived from verified ownership rather than HTTP input.
+    document_storage_prefix: str = "local"
     libreoffice_path: str | None = None
     web_identity_enabled: bool = True
     supabase_url: str | None = None

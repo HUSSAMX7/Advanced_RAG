@@ -1,15 +1,17 @@
 """File transfer and indexing operations; HTTP formatting stays in routes."""
 
 import asyncio
+import logging
 from pathlib import Path
 from uuid import uuid4
 
 from ...config import require_openai_key
 from ...ingestion.documents import prepare_document
-from . import processing, repository
+from . import object_storage, processing, repository
 from .schemas import public
 
 SUPPORTED = {".pdf", ".doc", ".docx", ".txt"}
+logger = logging.getLogger(__name__)
 
 
 class UploadTooLarge(Exception):
@@ -25,6 +27,7 @@ async def upload(file, library):
     original = file_id + suffix
     path = repository.uploads(library.registry) / original
     size = 0
+    remote_attempted = False
     try:
         with path.open("wb") as output:
             while block := await file.read(1024 * 1024):
@@ -38,6 +41,8 @@ async def upload(file, library):
             with path.open("rb") as source:
                 if b"%PDF-" not in source.read(1024):
                     raise ValueError("الملف المرفوع ليس PDF صالحًا.")
+        remote_attempted = object_storage.enabled(library.settings)
+        await object_storage.run(object_storage.upload, library.settings, path)
         row = repository.add(
             library.registry,
             name,
@@ -53,6 +58,13 @@ async def upload(file, library):
             repository.get(library.registry, file_id)
         except FileNotFoundError:
             path.unlink(missing_ok=True)
+            # Includes cancellation after a remote write finished. The owner
+            # cleanup waits for this request, so it cannot race a late upload.
+            if remote_attempted:
+                try:
+                    await object_storage.run(object_storage.delete, library.settings, original)
+                except object_storage.StorageUnavailable:
+                    logger.warning("Could not clean up an unregistered document upload")
 
 
 def train(library, file_id, *, require_owner_keys):
@@ -72,7 +84,9 @@ def original_file(library, file_id):
     row = repository.get(library.registry, file_id)
     if not row["original"]:
         raise FileNotFoundError("الملف الأصلي غير متوفر؛ أُضيف من سطر الأوامر.")
-    return repository.uploads(library.registry) / row["original"], row["name"]
+    return object_storage.original_path(
+        library.settings, repository.uploads(library.registry), row["original"]
+    ), row["name"]
 
 
 def source(library, chunk_id, assistant_id):

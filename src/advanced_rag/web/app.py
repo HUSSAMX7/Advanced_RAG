@@ -19,7 +19,7 @@ from .assistants import routes as assistant_routes
 from .assistants import services as assistants
 from .conversations import routes as conversation_routes
 from .conversations import services as conversations
-from .files import processing
+from .files import object_storage, processing
 from .files import routes as file_routes
 from .identity import routes as identity_routes
 from .identity import services as identity
@@ -87,6 +87,7 @@ def _create_workspace_app(
         lock = FileLock(str(settings.web_data_dir / ".app.lock"))
         lock.acquire(timeout=0)
         try:
+            await asyncio.to_thread(object_storage.check_bucket, settings)
             await processing.start(library)
             await assistants.start(assistant_state)
             await conversations.resume_titles(workspace)

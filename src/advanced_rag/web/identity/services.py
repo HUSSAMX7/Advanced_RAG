@@ -14,6 +14,7 @@ from uuid import UUID, uuid4
 
 from fastapi import HTTPException
 
+from ..files import object_storage
 from . import repository
 
 logger = logging.getLogger(__name__)
@@ -175,6 +176,12 @@ async def purge(state, guest_id):
                 await asyncio.gather(*tasks, return_exceptions=True)
                 # Lifespan cancels title work and awaits training before removal.
                 await workspace.stack.aclose()
+            cloud_settings = state.settings.model_copy(
+                update={
+                    "document_storage_prefix": "owners/guests/" + guest_id,
+                }
+            )
+            await asyncio.to_thread(object_storage.delete_workspace, cloud_settings)
             await asyncio.to_thread(repository.remove, state.database, state.root, guest_id)
     except Exception:
         # Revocation remains persisted; the sweeper retries failed cleanup.
@@ -197,6 +204,7 @@ async def open_workspace(state, key):
                     "openai_api_key": None,
                     "llama_parse_api_key": None,
                     "assistant_instructions": "",
+                    "document_storage_prefix": "owners/" + key,
                 }
             )
             app = state.factory(

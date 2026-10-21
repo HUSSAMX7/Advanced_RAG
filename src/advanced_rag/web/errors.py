@@ -3,6 +3,7 @@
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from .files.object_storage import StorageUnavailable
 from .files.processing import LibraryConflict
 from .files.services import UploadTooLarge
 
@@ -29,6 +30,10 @@ async def upload_too_large(request, exc):
     return JSONResponse({"detail": "حجم الملف أكبر من الحد المسموح."}, status_code=413)
 
 
+async def storage_unavailable(request, exc):
+    return JSONResponse({"detail": str(exc)}, status_code=503)
+
+
 def register(app):
     for error, handler in (
         (RequestValidationError, invalid_input),
@@ -36,5 +41,6 @@ def register(app):
         (LibraryConflict, conflict),
         (ValueError, bad_value),
         (UploadTooLarge, upload_too_large),
+        (StorageUnavailable, storage_unavailable),
     ):
         app.add_exception_handler(error, handler)

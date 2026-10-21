@@ -73,6 +73,15 @@ SQLite records, uploads, indexes, conversations and encrypted settings retain
 their existing storage formats and paths. This refactor does not introduce a
 database migration or distributed job queue.
 
+The subsequent original-file storage feature adds files/object_storage.py for
+Supabase transfers and local cache restoration, using plain functions with
+explicit settings/path dependencies. Its StorageUnavailable exception exists
+to map storage failures to HTTP 503. Owner and assistant services assign private
+storage namespaces and coordinate remote cleanup. Original uploads use private
+Supabase Storage when configured; metadata, indexes, conversations, extracted
+images and encrypted settings retain their existing local formats. See
+[the storage feature](specs/supabase-storage.md) for its scope and verification.
+
 Validation: the complete local suite passed with 131 tests after the refactor,
 along with Ruff and type checks for the web/config modules. These tests use
 mock providers and temporary storage; live Supabase email delivery remains a
