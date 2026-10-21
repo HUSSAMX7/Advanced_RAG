@@ -12,7 +12,7 @@ The goal: demonstrate high-quality RAG retrieval and answers without manually cl
 
 ![Madar answering a document question with a source citation](docs/images/chat.png)
 
-**PDF · Word · TXT** | Hybrid search + reranking | PDF images & diagrams | Answers with sources
+**PDF · Word · TXT** | Hybrid search + section expansion | PDF images & diagrams | Answers with sources
 
 ## Chunking process
 
@@ -42,7 +42,8 @@ flowchart TD
         F --> G["BGE reranking<br/>Top 5 seed chunks"]
     end
     subgraph Expansion["Stage 2: expand context"]
-        X["Load the matching subsection or section<br/>from the same file"] --> O["Deduplicate + order by page"]
+        X["Prefer the subsection<br/>Otherwise use the main section"] --> L["Load all its chunks<br/>Same file only"]
+        L --> O["Deduplicate + order by page"]
     end
     Q --> Dense
     Q --> Lexical
@@ -50,8 +51,8 @@ flowchart TD
     O --> Answer["LLM answer<br/>Original text + images<br/>Source citations"]
 ```
 
-Find relevant chunks first, then expand to their full subsection or section.
-The top-5 limit applies to seed chunks; expanded context can contain more passages.
+Find relevant chunks first, then expand to their full subsection or main section from the same file.
+Defaults: 20 candidates and 5 seed chunks; expanded context can contain more passages.
 See [section expansion](docs/specs/section-expansion.md) for fallback behavior and limits.
 
 <details>
@@ -67,4 +68,4 @@ See [section expansion](docs/specs/section-expansion.md) for fallback behavior a
 
 *Real app UI with illustrative data and a preset answer. “Train” indexes your documents.*
 
-[Get the app](https://github.com/HUSSAMX7/Advanced_RAG/tree/main) · [Setup & usage guide](docs/usage.md)
+[Get the app](https://github.com/HUSSAMX7/RAG_Everything/tree/main) · [Setup & usage guide](docs/usage.md)
