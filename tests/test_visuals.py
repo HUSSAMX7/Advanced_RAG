@@ -317,8 +317,12 @@ def test_cancellation_during_description_removes_unpublished_assets(tmp_path):
 def test_agent_receives_real_image_bytes_without_search_description_and_deduplicates(
     tmp_path, local_reranker
 ):
-    settings = web_settings(tmp_path).model_copy(update={"rerank_model": local_reranker.model_name})
+    settings = web_settings(tmp_path).model_copy(
+        update={"rerank_model": local_reranker.model_name, "retrieval_top_k": 1}
+    )
     nodes = asyncio.run(enrich(pdf_resource(), settings))
+    for node in nodes:
+        node.metadata.update(section_id="1: Engine", sub_section_id="1: Engine")
     embedding = MockEmbedding(embed_dim=2)
     store_in_faiss(nodes, settings, embed_model=embedding)
     context = load_search_context(settings, embed_model=embedding)
@@ -345,6 +349,8 @@ def test_agent_receives_real_image_bytes_without_search_description_and_deduplic
             assert image.format == "JPEG"
         output = next(item for item in body["input"] if item.get("type") == "function_call_output")
         matches = json.loads(output["output"])["matches"]
+        # One image-description seed expands to both original indexed passages.
+        assert [hit["chunk_id"] for hit in matches] == [node.node_id for node in nodes]
         return httpx.Response(
             200,
             json=response_payload(

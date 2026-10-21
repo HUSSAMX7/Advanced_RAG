@@ -4,10 +4,14 @@ import json
 import httpx
 import pytest
 from conftest import api_client, response_payload
+from fastapi.testclient import TestClient
+from llama_index.core.schema import TextNode
 
 from advanced_rag.agent import ask_agent
 from advanced_rag.agent.sessions import load_session, save_session
 from advanced_rag.retrieval import load_search_context
+from advanced_rag.storage import store_in_faiss
+from advanced_rag.web.app import create_app
 
 
 def tool_response(query):
@@ -23,6 +27,60 @@ def tool_response(query):
         }
     ]
     return response
+
+
+def test_agent_can_cite_expanded_sibling_and_open_its_source(corpus):
+    settings, embedding = corpus
+    text = "Payment is due within 14 days."
+    metadata = {"source": "invoice.pdf", "page_num": 4, "section_id": "2: Invoices"}
+    store_in_faiss(
+        [TextNode(id_="terms", text=text, embedding=[9.0, 9.0], metadata=metadata)],
+        settings,
+        embed_model=embedding,
+    )
+    context = load_search_context(settings, embed_model=embedding)
+    requests = []
+
+    def respond(request):
+        body = json.loads(request.content)
+        requests.append(body)
+        if len(requests) == 1:
+            return httpx.Response(200, json=tool_response("ZX-774"))
+        output = next(item for item in body["input"] if item.get("type") == "function_call_output")
+        matches = json.loads(output["output"])["matches"]
+        assert [hit["chunk_id"] for hit in matches] == ["identifier", "terms"]
+        assert matches[1]["text"] == text
+        return httpx.Response(
+            200,
+            json=response_payload(
+                {"answer": "Payment is due within 14 days. [2]", "cited_chunk_ids": ["terms"]}
+            ),
+        )
+
+    async def run():
+        async with api_client(respond) as client:
+            return await ask_agent(
+                "When is ZX-774 due?", context=context, settings=settings, client=client
+            )
+
+    answer = asyncio.run(run())
+    assert answer["sources"] == [{"chunk_id": "terms", "citation": 2, "metadata": metadata}]
+    assert (
+        load_session(answer["session_id"], settings=settings)["turns"][0]["sources"]
+        == answer["sources"]
+    )
+    web_settings = settings.model_copy(
+        update={
+            "web_identity_enabled": False,
+            "web_data_dir": settings.faiss_persist_dir.parent / "library",
+        }
+    )
+    with TestClient(create_app(web_settings, embed_model=embedding)) as client:
+        response = client.get("/api/sources/terms")
+        assert response.status_code == 200
+        assert response.json()["available"] is True
+        assert response.json()["text"] == text
+        assert response.json()["metadata"] == metadata
 
 
 def test_ambiguous_question_uses_document_first_guidance_and_assistant_preferences(corpus):

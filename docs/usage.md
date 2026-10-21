@@ -249,8 +249,20 @@ Failed questions and memory changes from failed requests are not saved.
 The model answers general questions directly. When needed, `search_documents`
 searches the index once for a document-related question. It collects up to 20
 semantic and 20 keyword results, merges them with RRF, reranks the best 20
-locally with BGE, and returns the top 5. The agent uses the OpenAI SDK directly,
-without LangChain or the Agents SDK.
+locally with BGE, and selects the top 5 seed chunks. Each seed then expands to
+all indexed passages in its subsection, or its main section when there is no
+distinct subsection. Expansion stays within the same file, deduplicates chunk
+IDs, and orders passages by page and stored chunk order. Files follow their
+first seed's relevance rank. The agent uses the OpenAI SDK directly, without
+LangChain or the Agents SDK.
+
+The final context can contain more than 5 passages. Missing section or file
+metadata keeps the original seed. Files assigned the filename-based fallback
+section can expand to the whole file. Existing indexes work without retraining;
+the original chunk IDs, text, images, and citation metadata are preserved.
+Large sections are passed in full and may exceed the model's context capacity;
+the existing context error is returned rather than silently truncating evidence.
+See [section expansion](specs/section-expansion.md).
 
 One search is not one OpenAI request: tool-query generation, question embeddings,
 and answer generation can require separate requests. Reranking runs locally.
@@ -268,8 +280,9 @@ for relevance scoring; original passages remain intact for answer generation.
 CPU reranking may be slow. It runs outside the server event loop and is
 serialized to avoid loading multiple copies of the model.
 
-Adjust candidate and result counts with `RETRIEVAL_CANDIDATES` and
-`RETRIEVAL_TOP_K`. Arabic and English normalization applies only to keyword
+Adjust candidate and seed counts with `RETRIEVAL_CANDIDATES` and
+`RETRIEVAL_TOP_K`; the latter does not cap expanded passages. Arabic and English
+normalization applies only to keyword
 search; original text, numbers, and dates are preserved. CLI chat builds BM25
 when it starts, so restart it after adding documents.
 

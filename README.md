@@ -36,22 +36,23 @@ PDF chunks inherit page and section metadata; headings do not define chunk bound
 ```mermaid
 flowchart TD
     Q["Search query"]
-    subgraph Candidates["Stage 1: candidate retrieval"]
+    subgraph Candidates["Stage 1: find relevant chunks"]
         Dense["FAISS<br/>Semantic search"] -->|"up to 20"| F["RRF fusion<br/>Top 20 candidates"]
         Lexical["BM25<br/>Keyword search"] -->|"up to 20"| F
+        F --> G["BGE reranking<br/>Top 5 seed chunks"]
     end
-    subgraph Reranking["Stage 2: BGE reranking"]
-        G["BGE cross-encoder<br/>Rerank → top 5"]
+    subgraph Expansion["Stage 2: expand context"]
+        X["Load the matching subsection or section<br/>from the same file"] --> O["Deduplicate + order by page"]
     end
     Q --> Dense
     Q --> Lexical
-    F --> G
-    G --> Answer["LLM answer<br/>Original text + images<br/>Source citations"]
+    G --> X
+    O --> Answer["LLM answer<br/>Original text + images<br/>Source citations"]
 ```
 
-Both searches use the indexed chunks and image descriptions. BGE reranks the
-merged shortlist before the answer model receives the original evidence.
-The 20-candidate and top-5 limits are configurable defaults.
+Find relevant chunks first, then expand to their full subsection or section.
+The top-5 limit applies to seed chunks; expanded context can contain more passages.
+See [section expansion](docs/specs/section-expansion.md) for fallback behavior and limits.
 
 <details>
 <summary>More screenshots</summary>

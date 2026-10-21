@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     rerank_batch_size: int = Field(default=1, gt=0)
     rerank_max_length: int = Field(default=2048, gt=0, le=8192)
     retrieval_candidates: int = Field(default=20, gt=0)
+    # Reranked seed chunks; section expansion may return more passages.
     retrieval_top_k: int = Field(default=5, gt=0)
     chat_sessions_dir: Path = Path("chat_sessions")
     web_data_dir: Path = Path("storage/library")
