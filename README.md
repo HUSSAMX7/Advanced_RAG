@@ -22,38 +22,35 @@ flowchart TD
     B -- PDF text --> C["LLM: extract numbered section headings per page"]
     C --> R["LLM: review and filter sections"]
     R --> M["Map section + subsection metadata to pages"]
-    B -- Word / TXT --> W["Use filename as section metadata"]
+    B -- Word / TXT --> S
     M --> S["SentenceSplitter: 1024 tokens / 50 overlap"]
-    W --> S
     S --> D["Embeddings + FAISS + BM25"]
     S -- PDF visuals enabled --> V["Extract PDF images + describe them for search"]
     V --> D
 ```
 
 PDF chunks inherit page and section metadata; headings do not define chunk boundaries.
-If no PDF sections are found, the filename is used as the section fallback.
 
 ## Retrieval process
 
 ```mermaid
 flowchart TD
-    D["Indexed chunks + image descriptions"]
-    Q["Your question"] --> Dense
-    Q --> Lexical
-    D --> Dense
-    D --> Lexical
+    Q["Search query"]
     subgraph Candidates["Stage 1: candidate retrieval"]
-        Dense["FAISS semantic search: up to 20 hits"] --> F["RRF fusion: keep up to 20 candidates"]
-        Lexical["BM25 keyword search: up to 20 hits"] --> F
+        Dense["FAISS: semantic search"] -->|"up to 20 hits"| F["RRF: merge rankings<br/>keep up to 20 unique candidates"]
+        Lexical["BM25: keyword search"] -->|"up to 20 hits"| F
     end
-    subgraph Reranking["Stage 2: relevance reranking"]
-        G["BGE cross-encoder: rerank candidates → top 5"]
+    subgraph Reranking["Stage 2: BGE reranking"]
+        G["Score each query–candidate pair<br/>and sort by relevance"] --> H["Keep the top 5 results"]
     end
+    Q --> Dense
+    Q --> Lexical
     F --> G
-    G --> H["Original text + related images → answer with sources"]
+    H --> Answer["Generate answer from original text + related images<br/>with source citations"]
 ```
 
-Retrieval first finds candidates, then reranks them.
+Both searches use the indexed chunks and image descriptions. BGE reranks the
+merged shortlist before the answer model receives the original evidence.
 The 20-candidate and top-5 limits are configurable defaults.
 
 <details>
