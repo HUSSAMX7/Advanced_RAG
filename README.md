@@ -28,15 +28,24 @@ flowchart TD
     S --> D["Embeddings + FAISS + BM25"]
     S -- PDF visuals enabled --> V["Extract PDF images + describe them for search"]
     V --> D
-    Q["Your question"] --> E["Hybrid retrieval"]
-    D --> E
-    E --> F["Merge rankings with RRF"]
-    F --> G["BGE reranking → top 5 passages"]
+    Q["Your question"] --> Dense
+    Q --> Lexical
+    D --> Dense
+    D --> Lexical
+    subgraph Candidates["Stage 1: candidate retrieval"]
+        Dense["FAISS semantic search: up to 20 hits"] --> F["RRF fusion: keep up to 20 candidates"]
+        Lexical["BM25 keyword search: up to 20 hits"] --> F
+    end
+    subgraph Reranking["Stage 2: relevance reranking"]
+        F --> G["BGE cross-encoder: rerank candidates → top 5"]
+    end
     G --> H["Original text + related images → answer with sources"]
 ```
 
 PDF chunks inherit page and section metadata; headings do not define chunk boundaries.
 If no PDF sections are found, the filename is used as the section fallback.
+Retrieval first finds candidates, then reranks them; it does not search sections
+and then search their chunks. The 20-candidate and top-5 limits are configurable defaults.
 
 <details>
 <summary>More screenshots</summary>
